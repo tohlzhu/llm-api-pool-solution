@@ -1,0 +1,73 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_mcp_pat",
+      "description": "GitHub fine-grained PAT for local MCP access. Prefer OAuth remote MCP when available.",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "hf_token",
+      "description": "Hugging Face token with the minimum scopes required by the reviewed MCP server.",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "gmail_oauth_client_secret_path",
+      "description": "Path to the reviewed Gmail OAuth client secret file on the developer machine.",
+      "password": false
+    }
+  ],
+  "servers": {
+    "github-official-remote": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "github-official-local-readonly": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "-e",
+        "GITHUB_READ_ONLY=1",
+        "-e",
+        "GITHUB_TOOLSETS=repos,issues,pull_requests,actions,code_security",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_mcp_pat}"
+      }
+    },
+    "vercel-official": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
+    },
+    "huggingface-reviewed-community": {
+      "command": "uvx",
+      "args": [
+        "reviewed-huggingface-mcp-server"
+      ],
+      "env": {
+        "HF_TOKEN": "${input:hf_token}",
+        "MCP_SECURITY_NOTE": "Replace reviewed-huggingface-mcp-server with an approved package or customer-owned wrapper after source and dependency review. Candidate community projects include evalstate/mcp-hfspace and shreyaskarnik/huggingface-mcp-server."
+      }
+    },
+    "gmail-reviewed-community": {
+      "command": "uvx",
+      "args": [
+        "reviewed-gmail-mcp-server",
+        "--credentials",
+        "${input:gmail_oauth_client_secret_path}",
+        "--readonly-default",
+        "--require-confirmation-for-send"
+      ],
+      "env": {
+        "MCP_SECURITY_NOTE": "Replace reviewed-gmail-mcp-server with an approved package or customer-owned Google Workspace Gmail API wrapper after OAuth scope and source review. Candidate community project: vladmsv/mcp-server-gmail."
+      }
+    }
+  }
+}

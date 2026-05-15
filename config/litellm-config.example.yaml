@@ -1,0 +1,213 @@
+# LiteLLM production-oriented example for a multi-subscription Foundry + Vertex pool.
+# Replace placeholders with Key Vault-backed environment variables. Do not store secrets in this file.
+
+model_list:
+  - model_name: claude-opus
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+      order: 1
+    model_info:
+      id: azure-foundry-01-claude-opus
+      provider: azure-foundry
+      base_model: claude-opus-4-7
+      full_content_logging: true
+  - model_name: claude-opus
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_02_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+      order: 1
+    model_info:
+      id: azure-foundry-02-claude-opus
+      provider: azure-foundry
+      base_model: claude-opus-4-7
+      full_content_logging: true
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: azure_ai/claude-sonnet-4-6
+      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 3600000
+      rpm: 4000
+      max_parallel_requests: 120
+      order: 1
+    model_info:
+      id: azure-foundry-01-claude-sonnet
+      provider: azure-foundry
+      base_model: claude-sonnet-4-6
+      full_content_logging: true
+  - model_name: claude-sonnet
+    litellm_params:
+      model: azure_ai/claude-sonnet-4-6
+      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_02_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 3600000
+      rpm: 4000
+      max_parallel_requests: 120
+      order: 1
+    model_info:
+      id: azure-foundry-02-claude-sonnet
+      provider: azure-foundry
+      base_model: claude-sonnet-4-6
+      full_content_logging: true
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+      order: 1
+    model_info:
+      id: azure-foundry-01-claude-haiku
+      provider: azure-foundry
+      base_model: claude-haiku-4-5
+      full_content_logging: true
+
+  - model_name: gpt-frontier
+    litellm_params:
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+      order: 2
+    model_info:
+      id: azure-foundry-01-gpt-55
+      provider: azure-openai
+      base_model: azure/gpt-5.5
+      full_content_logging: true
+  - model_name: gpt-frontier
+    litellm_params:
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
+      api_key: os.environ/AZURE_FOUNDRY_02_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+      order: 2
+    model_info:
+      id: azure-foundry-02-gpt-54
+      provider: azure-openai
+      base_model: azure/gpt-5.4
+      full_content_logging: true
+
+  - model_name: vertex-claude-sonnet
+    litellm_params:
+      model: vertex_ai/claude-sonnet-4-6
+      vertex_project: os.environ/VERTEX_PROJECT_ID
+      vertex_location: os.environ/VERTEX_LOCATION
+      vertex_credentials: os.environ/VERTEX_CREDENTIALS_JSON
+      tpm: 1000000
+      rpm: 2000
+      max_parallel_requests: 80
+      order: 3
+    model_info:
+      id: vertex-claude-sonnet-partner
+      provider: vertex-ai
+      base_model: claude-sonnet-4-6
+      full_content_logging: true
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 60
+  num_retries: 3
+  success_callback: ["langfuse", "otel", "azure_sentinel"]
+  failure_callback: ["langfuse", "otel", "azure_sentinel", "sentry"]
+  callbacks: ["langfuse", "otel"]
+  turn_off_message_logging: false
+  redact_user_api_key_info: true
+  global_disable_no_log_param: true
+  store_prompts_in_spend_logs: true
+  fallbacks:
+    - claude-opus: ["claude-sonnet", "gpt-frontier", "vertex-claude-sonnet"]
+    - claude-sonnet: ["gpt-frontier", "vertex-claude-sonnet"]
+    - claude-haiku: ["claude-sonnet", "gpt-frontier"]
+  context_window_fallbacks:
+    - claude-haiku: ["claude-sonnet", "gpt-frontier"]
+    - claude-sonnet: ["claude-opus", "gpt-frontier"]
+  content_policy_fallbacks:
+    - claude-sonnet: ["gpt-frontier"]
+
+router_settings:
+  routing_strategy: simple-shuffle
+  enable_weighted_failover: true
+  enable_pre_call_checks: true
+  allowed_fails: 2
+  cooldown_time: 90
+  num_retries: 2
+  retry_after: 5
+  timeout: 120
+  redis_host: os.environ/REDIS_HOST
+  redis_port: os.environ/REDIS_PORT
+  redis_password: os.environ/REDIS_PASSWORD
+  redis_ssl: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  database_connection_pool_limit: 10
+  database_connection_timeout: 60
+  store_model_in_db: true
+  disable_spend_logs: false
+  disable_error_logs: false
+  alerting: ["slack"]
+  proxy_batch_write_at: 60
+  proxy_batch_polling_interval: 60
+
+environment_variables:
+  LANGFUSE_HOST: os.environ/LANGFUSE_HOST
+  LANGFUSE_PUBLIC_KEY: os.environ/LANGFUSE_PUBLIC_KEY
+  LANGFUSE_SECRET_KEY: os.environ/LANGFUSE_SECRET_KEY
+  OTEL_EXPORTER: otlp_http
+  OTEL_ENDPOINT: os.environ/OTEL_ENDPOINT
+  AZURE_SENTINEL_WORKSPACE_ID: os.environ/AZURE_SENTINEL_WORKSPACE_ID
+  AZURE_SENTINEL_SHARED_KEY: os.environ/AZURE_SENTINEL_SHARED_KEY
+  SENTRY_DSN: os.environ/SENTRY_DSN
+  SLACK_WEBHOOK_URL: os.environ/SLACK_WEBHOOK_URL
+
+team_settings:
+  - team_id: engineering
+    team_alias: Engineering
+    max_budget: 50000
+    budget_duration: 30d
+    models: ["claude-opus", "claude-sonnet", "claude-haiku", "gpt-frontier"]
+    tpm_limit: 20000000
+    rpm_limit: 20000
+  - team_id: analyst
+    team_alias: Analyst
+    max_budget: 15000
+    budget_duration: 30d
+    models: ["claude-sonnet", "claude-haiku", "gpt-frontier"]
+    tpm_limit: 8000000
+    rpm_limit: 8000
+
+guardrails:
+  full_request_response_logging:
+    required_approvals: ["security", "legal", "data_protection_officer"]
+    storage_controls:
+      encryption_at_rest: required
+      encryption_in_transit: required
+      rbac: required
+      access_review_days: 30
+      retention_days: 90
+      break_glass_approval: required
