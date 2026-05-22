@@ -80,6 +80,40 @@ model_list:
       base_model: claude-haiku-4-5
       full_content_logging: true
 
+  - model_name: batch-claude-haiku
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_BATCH_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 2500000
+      rpm: 3000
+      max_parallel_requests: 80
+      order: 1
+    model_info:
+      id: azure-batch-foundry-01-claude-haiku
+      provider: azure-foundry
+      base_model: claude-haiku-4-5
+      workload_type: scheduled-batch
+      full_content_logging: true
+
+  - model_name: batch-gpt-nano
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_BATCH_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 5000000
+      rpm: 6000
+      max_parallel_requests: 120
+      order: 1
+    model_info:
+      id: azure-batch-foundry-01-gpt-nano
+      provider: azure-openai
+      base_model: azure/gpt-5.4-nano
+      workload_type: scheduled-batch
+      full_content_logging: true
+
   - model_name: gpt-frontier
     litellm_params:
       model: azure/gpt-5.5
@@ -127,6 +161,23 @@ model_list:
       base_model: claude-sonnet-4-6
       full_content_logging: true
 
+  - model_name: batch-gemini-flash
+    litellm_params:
+      model: vertex_ai/gemini-2.5-flash
+      vertex_project: os.environ/VERTEX_BATCH_PROJECT_ID
+      vertex_location: os.environ/VERTEX_BATCH_LOCATION
+      vertex_credentials: os.environ/VERTEX_BATCH_CREDENTIALS_JSON
+      tpm: 5000000
+      rpm: 6000
+      max_parallel_requests: 120
+      order: 2
+    model_info:
+      id: vertex-batch-gemini-flash
+      provider: vertex-ai
+      base_model: gemini-2.5-flash
+      workload_type: scheduled-batch
+      full_content_logging: true
+
 litellm_settings:
   drop_params: true
   request_timeout: 60
@@ -142,6 +193,8 @@ litellm_settings:
     - claude-opus: ["claude-sonnet", "gpt-frontier", "vertex-claude-sonnet"]
     - claude-sonnet: ["gpt-frontier", "vertex-claude-sonnet"]
     - claude-haiku: ["claude-sonnet", "gpt-frontier"]
+    - batch-claude-haiku: ["batch-gpt-nano", "batch-gemini-flash"]
+    - batch-gpt-nano: ["batch-gemini-flash"]
   context_window_fallbacks:
     - claude-haiku: ["claude-sonnet", "gpt-frontier"]
     - claude-sonnet: ["claude-opus", "gpt-frontier"]
@@ -200,6 +253,13 @@ team_settings:
     models: ["claude-sonnet", "claude-haiku", "gpt-frontier"]
     tpm_limit: 8000000
     rpm_limit: 8000
+  - team_id: scheduled-jobs
+    team_alias: Scheduled Jobs
+    max_budget: 5000
+    budget_duration: 30d
+    models: ["batch-claude-haiku", "batch-gpt-nano", "batch-gemini-flash"]
+    tpm_limit: 6000000
+    rpm_limit: 6000
 
 guardrails:
   full_request_response_logging:
@@ -211,3 +271,15 @@ guardrails:
       access_review_days: 30
       retention_days: 90
       break_glass_approval: required
+  batch_workload_isolation:
+    dedicated_models: ["batch-claude-haiku", "batch-gpt-nano", "batch-gemini-flash"]
+    deny_fallback_to_interactive_models: true
+    preferred_models: ["batch-gpt-nano", "batch-gemini-flash", "batch-claude-haiku"]
+    repeated_prompt_review: required
+  log_archival:
+    postgres_hot_retention_days: 30
+    archive_schedule: "nightly-low-traffic-window"
+    archive_targets: ["clickhouse", "elasticsearch"]
+    require_row_count_validation: true
+    delete_source_after_archive_validation: true
+    failure_behavior: "keep_source_data"
