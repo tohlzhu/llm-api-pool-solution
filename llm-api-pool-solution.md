@@ -447,7 +447,7 @@ VERBOSE=true scripts/test-endpoints.sh
 
 1. Microsoft Learn：Microsoft Foundry、Foundry Models sold directly by Azure、Azure OpenAI GPT 5.4/5.5、Foundry Models from partners and community、Anthropic partner model、Foundry project 创建文档。
 2. Microsoft Learn：EA/MCA programmatic subscription creation、Subscription Alias API、Azure billing scope、Marketplace/SaaS 权限文档。
-3. LiteLLM Docs：routing、proxy config、fallbacks/reliability、logging、OpenTelemetry、Azure Sentinel、Redis router state、virtual keys。
+3. LiteLLM Docs [litellm doc](https://docs.litellm.ai/docs/)：routing、proxy config、fallbacks/reliability、logging、OpenTelemetry、Azure Sentinel、Redis router state、virtual keys。
 4. Google Cloud Docs：Vertex AI / Gemini Enterprise Agent Platform Claude partner models、Claude model cards、request/response logging。
 5. GitHub Docs 与 `github/github-mcp-server`：GitHub official MCP server、remote MCP、local Docker MCP、toolsets、read-only、lockdown mode。
 6. Vercel Docs：Vercel official MCP `https://mcp.vercel.com`、OAuth、supported clients、安全最佳实践。
