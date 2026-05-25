@@ -354,6 +354,40 @@ VERBOSE=true scripts/test-endpoints.sh
 3. 确认 billing scope 格式、服务主体权限和订阅配额限制。
 4. 部署完成后使用 `test-endpoints.sh` 验证所有端点的连通性和模型可访问性。
 
+### 7.5 实际命令举例
+
+举例如下，Claude 端点和 GPT 端点分开创建，Claude 不用于批处理任务。Foundry 模型端点 10 组，LiteLLM model_name 5 组，避免一个 model_name 影响全部 foundry 模型端点。
+
+```sh
+export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/{_get_real_billingAccounts_}/billingProfiles/{_get_real_billingProfiles_}/invoiceSections/{_get_real_invoiceSections_}"
+
+scripts/create-foundry-pool.sh --prefix test --count 10 --dry-run -s "$BILLING_SCOPE"
+
+# location: eastus2 or swedencentral for Claude endpoint, since 202605
+# only for claude, with no batch
+scripts/create-foundry-pool.sh \
+  --mgmt-group grp-demoai \
+  --prefix democlaude2605 \
+  --count 10 \
+  --batch-count 0 \
+  --location eastus2 \
+  --billing-scope "$BILLING_SCOPE" \
+  --no-batch \
+  --no-gpt
+
+# only for gpt, with batch
+scripts/create-foundry-pool.sh \
+  --mgmt-group grp-demoai \
+  --prefix demogpt2605 \
+  --count 10 \
+  --batch-count 1 \
+  --location eastus2 \
+  --billing-scope "$BILLING_SCOPE" \
+  --no-claude
+
+VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-ep.txt
+```
+
 ## 8. MCP / Skill 推荐
 
 配套 VS Code 示例见 [.vscode/mcp.example.json](.vscode/mcp.example.json)。
