@@ -69,6 +69,61 @@
 3. 启用 weighted failover，使某个 Azure endpoint 失败时先在同一模型组内切换健康端点，再进入跨模型 fallback。
 4. 为 429、5xx、timeout 设置冷却与有限重试，避免短时间内持续打向同一异常端点。
 
+### 4.2.1 LiteLLM model_name 冗余隔离（防政策封禁扩散）
+
+#### 风险背景
+
+Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 Foundry 端点接收到违反模型使用政策的请求时，该端点可能被暂停或封禁。如果 LiteLLM 中所有用户共用同一个 `model_name`（例如 `claude-sonnet`），该名称下的全部 Foundry endpoint 都暴露在同一风险面中——一次政策违规触发的封禁可能影响该组全部端点，导致所有用户失去对该模型的访问能力。
+
+#### 设计原则
+
+将 LiteLLM 层面的 `model_name` 按冗余组拆分，使每个组只映射到总端点池的子集。当某组内的端点因政策违规被封禁时，仅影响该组用户，其他组不受牵连。
+
+#### 具体方案（以 10 订阅 / 5 组为例）
+
+将 10 个 Foundry 订阅的端点按顺序划分为 5 个隔离组，每组包含 2 个端点：
+
+```
+订阅分组:
+  Group 1: subscription-01, subscription-02  →  model_name: claude-sonnet-1
+  Group 2: subscription-03, subscription-04  →  model_name: claude-sonnet-2
+  Group 3: subscription-05, subscription-06  →  model_name: claude-sonnet-3
+  Group 4: subscription-07, subscription-08  →  model_name: claude-sonnet-4
+  Group 5: subscription-09, subscription-10  →  model_name: claude-sonnet-5
+```
+
+同理适用于 `claude-opus-{1..5}`、`claude-haiku-{1..5}`、`gpt-frontier-{1..5}` 等所有主交互模型。
+
+#### 用户分配策略
+
+1. 将 1000 名员工按团队、部门或随机分桶分配到 5 个组之一。
+2. 每个团队/用户的 virtual key 绑定对应组的 `model_name`（例如 team-A 使用 `claude-sonnet-1`，team-B 使用 `claude-sonnet-2`）。
+3. 分配关系通过 LiteLLM 的 `team_settings` 中的 `models` 字段或 key-level `model_access` 控制。
+4. 用户无需关心底层分组，应用侧可通过配置或 header 路由到正确的 model_name。
+
+#### 容灾与降级
+
+1. 组内 2 个端点之间按常规 LiteLLM 路由做负载均衡和 failover。
+2. 当某组全部端点被封禁时，该组用户通过 `fallbacks` 降级到其他模型（如 `gpt-frontier-{N}`），而不是自动切换到其他 Claude 组——避免"带病"流量扩散到健康组。
+3. 管理员在确认问题源头并处置违规用户后，可手动将受影响组的用户临时迁移到其他组。
+
+#### 隔离效果
+
+| 场景 | 无 model_name 隔离 | 有 5 组隔离 |
+| --- | --- | --- |
+| 某用户违规触发端点封禁 | 所有 10 个端点暴露风险，可能全员受影响 | 仅该用户所在组的 2 个端点受影响，其余 80% 容量正常 |
+| 封禁组内跨端点扩散 | 10 个端点链式风险 | 最大受影响范围限制在 2 个端点 |
+| 恢复操作 | 需对全部端点逐一排查 | 只需处理受影响组的 2 个端点和对应用户 |
+
+#### 配套要求
+
+1. 审计日志必须记录每个请求对应的 `model_name` 组号和用户标识，便于追溯违规来源。
+2. 运维监控需按 model_name 组粒度展示封禁、429、5xx 状态，快速定位受影响范围。
+3. 用户分组映射应存储在 LiteLLM 数据库或外部配置中心，支持动态调整。
+4. 定时任务池（`batch-*`）不适用此隔离方案，因其使用独立订阅和端点，已天然隔离。
+
+配套配置示例见 [config/litellm-config.example.yaml](config/litellm-config.example.yaml)。
+
 ### 4.3 第三层：GPT 池化与用户可选模型
 
 客户当前以 Claude 为主，但 GPT 模型能力持续演进，且部分员工更适应 GPT 工作流。方案建议将 GPT 作为与 Claude 并行的一等模型池，而不是只在故障时被动使用。
@@ -113,6 +168,7 @@ Developer Apps / Internal Tools / Agents
                  v
         LiteLLM API Gateway on AKS
         - Auth / virtual keys / teams
+        - model_name isolation (5 groups per model)
         - routing / fallback / cooldown
         - full request-response logging
         - cost and quota governance
@@ -123,6 +179,14 @@ Developer Apps / Internal Tools / Agents
 Azure Foundry Claude Pool      Azure Foundry GPT Pool    Vertex Claude via Partner
 10 subscriptions               10 subscriptions          Separate cloud/provider path
 Opus/Sonnet/Haiku              GPT 5.4 / GPT 5.5         Claude Opus/Sonnet/Haiku
+  |                                  |
+  v                                  v
+model_name isolation:            model_name isolation:
+  claude-sonnet-1: sub-01,02       gpt-frontier-1: sub-01,02
+  claude-sonnet-2: sub-03,04       gpt-frontier-2: sub-03,04
+  claude-sonnet-3: sub-05,06       gpt-frontier-3: sub-05,06
+  claude-sonnet-4: sub-07,08       gpt-frontier-4: sub-07,08
+  claude-sonnet-5: sub-09,10       gpt-frontier-5: sub-09,10
 
 Scheduled / batch workload pool:
 Internal Jobs --> LiteLLM batch-* groups --> Dedicated Foundry / Vertex lightweight endpoints
@@ -141,19 +205,21 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 
 ### 6.1 模型分组与命名
 
-建议以用户视角定义稳定模型别名，底层部署细节对应用透明：
+建议以用户视角定义稳定模型别名，底层部署细节对应用透明。为防止政策封禁扩散，每个主交互模型应拆分为 N 个隔离组（推荐 5 组），每组映射到不同的 Foundry 端点子集（详见 4.2.1 节）：
 
 | LiteLLM 模型名 | 底层供应 | 说明 |
 | --- | --- | --- |
-| `claude-opus` | Foundry Claude Opus 多订阅池 | 高复杂度任务 |
-| `claude-sonnet` | Foundry Claude Sonnet 多订阅池 | 默认 Claude 主力模型 |
-| `claude-haiku` | Foundry Claude Haiku 多订阅池 | 低延迟、高频轻量任务 |
-| `gpt-frontier` | Foundry GPT 5.5 / GPT 5.4 多订阅池 | GPT 主力模型 |
-| `gpt-fast` | Foundry GPT 5.4 mini/nano 或后续轻量模型 | 快速低成本任务 |
-| `vertex-claude-sonnet` | Vertex Claude via Partner | Claude 跨云备用 |
-| `batch-claude-haiku` | 定时任务专用 Foundry Claude Haiku 池 | 周期性任务首选 Claude 模型组 |
+| `claude-opus-{1..5}` | 每组 2 个 Foundry Claude Opus 端点 | 高复杂度任务，5 组隔离 |
+| `claude-sonnet-{1..5}` | 每组 2 个 Foundry Claude Sonnet 端点 | 默认 Claude 主力模型，5 组隔离 |
+| `claude-haiku-{1..5}` | 每组 2 个 Foundry Claude Haiku 端点 | 低延迟、高频轻量任务，5 组隔离 |
+| `gpt-frontier-{1..5}` | 每组 2 个 Foundry GPT 5.5 / 5.4 端点 | GPT 主力模型，5 组隔离 |
+| `gpt-fast-{1..5}` | 每组 2 个 Foundry GPT mini/nano 端点 | 快速低成本任务，5 组隔离 |
+| `vertex-claude-sonnet` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
+| `batch-claude-haiku` | 定时任务专用 Foundry Claude Haiku 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
 | `batch-gpt-nano` | 定时任务专用 Foundry GPT nano 池 | 低成本、高频重复 prompt |
 | `batch-gemini-flash` | 定时任务专用 Vertex Gemini Flash 池 | 跨云轻量批处理备用 |
+
+用户分配到某一组号后，应用层使用对应的 `model_name`（如 `claude-sonnet-3`）发起请求。LiteLLM 的 team/key 配置限定每个用户只能访问其所属组的模型名。
 
 ### 6.2 路由、限流与降级
 
@@ -163,7 +229,8 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 4. 推荐 `num_retries: 2` 或 `3`，并配合 `retry_after`、`allowed_fails`、`cooldown_time`。
 5. 对认证错误、权限错误、配额配置错误设置低重试或不重试，避免无效请求放大。
 6. 单独配置 `context_window_fallbacks` 和 `content_policy_fallbacks`，不要把所有错误都当作同一种故障。
-7. 定时任务必须使用 `batch-*` 模型组和独立 virtual key；生产网关应通过 key 权限、team model allowlist 或应用侧校验，阻止批处理任务调用交互式 `claude-*`、`gpt-frontier` 模型组。
+7. 定时任务必须使用 `batch-*` 模型组和独立 virtual key；生产网关应通过 key 权限、team model allowlist 或应用侧校验，阻止批处理任务调用交互式模型组。
+8. 各隔离组的 `fallbacks` 应降级到跨模型（如 `claude-sonnet-N` → `gpt-frontier-N`），而不是降级到同模型的其他组号——避免违规流量扩散到健康组。`content_policy_fallbacks` 同理。
 
 ### 6.3 日志与审计
 
@@ -198,16 +265,94 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 
 ## 7. Azure 自动化建议
 
-本仓库提供 [scripts/create-foundry-pool.sh](scripts/create-foundry-pool.sh) 作为参考实现。脚本遵循以下原则：
+本仓库提供账号池批量创建工具，覆盖从订阅创建到模型端点就绪的全流程：
 
-1. 使用 EA/MCA billing scope 创建 subscription alias。
-2. 对每个 subscription 注册必要 provider。
-3. 创建资源组、Foundry/Cognitive Services 资源、Key Vault 和模型部署占位。
-4. 对 Anthropic Claude 相关 Marketplace 条款、区域支持、订阅类型支持设置人工确认和占位。
-5. 可通过参数额外创建定时任务专用 subscription，并在输出清单中标记 `interactive` 或 `batch` 池角色。
-6. 输出 LiteLLM 所需 endpoint、deployment name、Key Vault secret name、region、model group 等配置片段。
+- **[scripts/create-foundry-pool.sh](scripts/create-foundry-pool.sh)**：多订阅 Foundry 池一键创建脚本，支持通过命令行参数指定批次命名前缀和创建套数。
+- **[scripts/test-endpoints.sh](scripts/test-endpoints.sh)**：端点连通性验证脚本，自动遍历创建结果清单并逐一测试模型可访问性。
 
-需要注意：Foundry 新旧资源模型、Azure CLI 扩展、Marketplace 模型购买 API 和模型 deployment API 会随平台演进而变化。正式投产前，应在客户测试租户中完成脚本 dry run、权限验证、模型 SKU 验证和配额验证。
+### 7.1 create-foundry-pool.sh 功能
+
+脚本为每一套资源执行完整创建流程：
+
+1. 通过 EA/MCA billing scope 调用 Subscription Alias API 创建新订阅。
+2. 将新订阅移入指定管理组（可选）。
+3. 在新订阅中注册必要 resource provider。
+4. 创建资源组、Key Vault 和 AI Foundry（Cognitive Services AIServices）资源。
+5. 在 Foundry 资源上部署 Claude（Opus 4.7、Sonnet 4.6、Haiku 4.5）和 GPT 模型端点。
+6. 输出 CSV 清单，包含每个端点的订阅 ID、资源组、Foundry 名称、endpoint URL 和 Key Vault 名。
+
+通过 `--prefix` 参数区分不同批次资源的命名，通过 `--count` 参数控制创建的订阅套数。
+
+### 7.2 命令行用法
+
+```bash
+# 列出所有 billing account
+az billing account list --query "[].{name:name, type:agreementType}" -o table
+
+# EA 示例
+export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/1234567/enrollmentAccounts/7654321"
+
+# MCA 示例
+export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/e879cf0f-xxxx:yyyy-zzzz/billingProfiles/AW4F-xxxx-BG7-TGB/invoiceSections/SH3V-xxxx-PJA-TGB"
+
+# 创建 3 套交互式订阅 + 1 套批处理订阅，前缀为 "teamA"
+scripts/create-foundry-pool.sh \
+  --prefix teamA \
+  --count 3 \
+  --batch-count 1 \
+  --location eastus2 \
+  --billing-scope "/providers/Microsoft.Billing/billingAccounts/.../invoiceSections/..."
+
+# 仅创建 Claude 端点（不含 GPT），5 套，前缀 "claude-pool"
+scripts/create-foundry-pool.sh \
+  --prefix claude-pool \
+  --count 5 \
+  --no-gpt \
+  --no-batch \
+  --billing-scope "$BILLING_SCOPE"
+
+# Dry run 模式：打印所有操作但不执行
+scripts/create-foundry-pool.sh --prefix test --count 2 --dry-run -s "$BILLING_SCOPE"
+```
+
+主要参数：
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `-p, --prefix` | 资源命名前缀，用于区分批次 | `llmpool` |
+| `-n, --count` | 交互式订阅套数 | `10` |
+| `-b, --batch-count` | 批处理订阅套数 | `5` |
+| `-l, --location` | Azure 区域 | `eastus2` |
+| `-s, --billing-scope` | EA/MCA 计费范围（必需） | — |
+| `-m, --mgmt-group` | 管理组 ID（可选） | — |
+| `--no-gpt` | 跳过 GPT 模型部署 | — |
+| `--no-claude` | 跳过 Claude 模型部署 | — |
+| `--no-batch` | 跳过批处理池创建 | — |
+| `--dry-run` | 仅打印操作，不实际执行 | — |
+
+### 7.3 端点连通性测试
+
+创建完成后使用 `test-endpoints.sh` 验证端点可用性：
+
+```bash
+# 使用默认 claude-sonnet-4-6 模型测试所有端点
+scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
+
+# 指定测试 claude-haiku-4-5
+MODEL=claude-haiku-4-5 scripts/test-endpoints.sh
+
+# 显示完整响应
+VERBOSE=true scripts/test-endpoints.sh
+```
+
+### 7.4 注意事项
+
+需要注意：Foundry 新旧资源模型、Azure CLI 扩展、Marketplace 模型购买 API 和模型 deployment API 会随平台演进而变化。正式投产前，应在客户测试租户中完成以下验证：
+
+1. 使用 `--dry-run` 模式确认脚本将执行的操作。
+2. 在测试订阅中验证 Anthropic Claude 模型的 Marketplace 条款接受、区域可用性和部署 API 兼容性。
+3. 确认 billing scope 格式、服务主体权限和订阅配额限制。
+4. 部署完成后使用 `test-endpoints.sh` 验证所有端点的连通性和模型可访问性。
 
 ## 8. MCP / Skill 推荐
 
@@ -292,6 +437,7 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 4. 权限验证：普通员工无法访问底层 Foundry key，审计员只读访问日志。
 5. MCP 验证：GitHub/Vercel 写操作必须触发人工确认，Gmail 发送邮件默认禁止或需二次确认。
 6. 定时任务隔离验证：批处理 virtual key 只能访问 `batch-*` 模型组，交互式 key 默认不能访问批处理池；重复 prompt 触发暂停和人工复核流程。
+9. model_name 隔离验证：模拟某组端点被封禁，确认仅该组用户受影响，其他组可正常使用；确认 fallback 不跨组、只跨模型。
 7. 日志归档验证：夜间 DMS/ETL 任务能迁移 30 天以上日志，完成行数校验、查询回放和源端清理，且失败时不删除源数据。
 8. Copilot 留存验证：抽样确认 IDE 请求经代理写入 Elasticsearch/SIEM，证书、代理认证、用户映射和脱敏策略符合安全评审要求。
 
