@@ -133,13 +133,13 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 1. `claude-sonnet`、`claude-opus`、`claude-haiku`：默认进入 Claude 池。
 2. `gpt-frontier`、`gpt-fast`：默认进入 GPT 池。
 
-同时为 Claude 模型配置 GPT fallback，使 Claude 模型组在全部同模型端点不可用后，可按策略降级至 GPT。对需要模型一致性的业务，要求应用显式声明 fallback 策略。
+同时为 Claude 模型配置多级 fallback：Foundry Claude 端点不可用时，首先降级至 GCP Vertex AI Claude 端点（同模型类型，保证输出风格和能力一致性），仅当所有 Claude 供应渠道均不可用时，才降级至 GPT。该优先级确保 Claude 工作负载在 fallback 后行为一致、不因模型类型切换导致工作异常。对需要严格模型一致性的业务，要求应用显式声明 fallback 策略或禁用跨模型降级。
 
 ### 4.4 第四层：Partner Vertex Claude 渠道
 
 通过 Partner 为客户提供 Google Vertex AI / Gemini Enterprise Agent Platform 中的 Claude API，作为 Claude 的跨云供应补充。该渠道不替代 Foundry 主渠道，但在 Foundry Claude 端点受 Marketplace、区域可用性、订阅异常或模型提供方策略影响时，提供独立供应路径。
 
-LiteLLM 中应将 Vertex Claude 放在 Claude 模型组的后序 fallback，避免日常流量优先打到第三方 Partner 渠道，同时确保故障时可用。跨云账单、支持路径、SLA、区域可用性和数据处理条款应单独登记。
+LiteLLM 中应将 Vertex Claude 放在 Foundry Claude 的**首选 fallback**位置（优先于 GPT），确保降级后模型类型一致、输出风格和能力不变。日常流量仍优先走 Foundry，只有 Foundry Claude 端点不可用时才切换到 Vertex Claude；所有 Claude 渠道均不可用时，再降级至 GPT。该设计保证 Claude 为主的工作负载在 fallback 后不会因模型切换而出现格式、能力或行为异常。跨云账单、支持路径、SLA、区域可用性和数据处理条款应单独登记。
 
 ### 4.5 第五层：GitHub Copilot 开发工作兜底
 
@@ -230,7 +230,7 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 5. 对认证错误、权限错误、配额配置错误设置低重试或不重试，避免无效请求放大。
 6. 单独配置 `context_window_fallbacks` 和 `content_policy_fallbacks`，不要把所有错误都当作同一种故障。
 7. 定时任务必须使用 `batch-*` 模型组和独立 virtual key；生产网关应通过 key 权限、team model allowlist 或应用侧校验，阻止批处理任务调用交互式模型组。
-8. 各隔离组的 `fallbacks` 应降级到跨模型（如 `claude-sonnet-N` → `gpt-frontier-N`），而不是降级到同模型的其他组号——避免违规流量扩散到健康组。`content_policy_fallbacks` 同理。
+8. 各隔离组的 `fallbacks` 应优先降级到 Vertex Claude（同模型类型，如 `claude-sonnet-N` → `vertex-claude-sonnet`），再降级到 GPT（如 `gpt-frontier-N`），绝不降级到同模型的其他组号——避免违规流量扩散到健康组。该顺序确保 fallback 后模型行为一致性。`content_policy_fallbacks` 同理。
 
 ### 6.3 日志与审计
 
@@ -441,7 +441,157 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 4. 对高敏感团队可以只采集元数据或脱敏摘要；完整请求/响应采集需单独审批。
 5. 定期核验 GitHub Copilot 客户端域名、协议和产品行为变化，避免因客户端升级造成漏采、阻断或误采。
 
-## 10. 安全、合规与治理
+## 10. Vibe Coding 方案 B：GitHub Copilot 桥接 Claude Code
+
+除 "Claude Code + LiteLLM + Foundry Claude endpoint" 主方案外，客户如需在不依赖自建 LiteLLM 网关的前提下为员工提供 Claude Code（或 OpenClaw 等本地 Agent Harness）能力，可通过 GitHub Copilot 的模型 API 桥接实现。该方案使用开源 `copilot-api` 代理将 GitHub Copilot 后端暴露为本地 OpenAI 兼容 HTTP 端点，供 Claude Code 或其他 Agent 工具直接消费。
+
+**方案定位**：与 "Claude Code + LiteLLM + Foundry Claude endpoint" 同级别的 Vibe Coding 软件解决方案，适合以下场景：
+
+1. 客户已为员工采购 GitHub Copilot Business/Enterprise 账号。
+2. 不希望为少数高级 Vibe Coding 用户额外搭建 LiteLLM 网关和 Foundry 端点。
+3. 需要在本地 Claude Code 或 OpenClaw 等 Agent 中直接使用高质量模型。
+4. 接受每个 Copilot 账号只服务一个终端的限制。
+
+### 10.1 架构概览
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         员工本地开发终端                                        │
+│                                                                              │
+│  ┌─────────────┐    HTTP :4141     ┌─────────────────┐                       │
+│  │ Claude Code │ ─────────────────→│  copilot-api    │                       │
+│  │ / OpenClaw  │ ←─────────────────│  (本地代理)      │                       │
+│  │ / Aider     │   模型响应         │  端口 4141       │                       │
+│  └─────────────┘                   └────────┬────────┘                       │
+│                                             │                                │
+└─────────────────────────────────────────────┼────────────────────────────────┘
+                                              │ HTTPS (GitHub Device Auth)
+                                              │ 使用员工个人 Copilot 账号
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     GitHub Copilot 云端服务                                    │
+│                                                                             │
+│   可用模型：Claude Sonnet 4.5 / Opus 4 / Gemini 2.5 Pro / O3 等             │
+│   认证：GitHub Device Flow → OAuth Token                                    │
+│   限制：单账号单终端使用，避免并发异常                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    企业审计层 (可选，推荐)                                      │
+│                                                                              │
+│  ┌─────────────┐            ┌────────────────┐          ┌───────────────┐   │
+│  │ Claude Code │──HTTP(S)──→│ mitmproxy /    │──写入──→ │ Elasticsearch │   │
+│  │ copilot-api │            │ mitmproxy-     │          │ / Kibana      │   │
+│  │ 出站流量     │            │ copilot        │          │ / SIEM        │   │
+│  └─────────────┘            └────────────────┘          └───────────────┘   │
+│                                                                              │
+│  mitmproxy 拦截 copilot-api 到 GitHub 的所有 HTTPS 请求，                     │
+│  将 prompt、模型响应、token 用量等写入审计存储，                                │
+│  实现与主方案同等的请求留存能力。                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 工作原理
+
+1. 员工在本地安装 `copilot-api`（npm 包），启动后通过 GitHub Device Flow 完成一次性 OAuth 认证。
+2. `copilot-api` 在本地 `localhost:4141` 暴露 OpenAI 兼容 HTTP 接口，将请求转发至 GitHub Copilot 后端模型（Claude Sonnet、Opus、Gemini、O3 等）。
+3. Claude Code 通过 `ANTHROPIC_BASE_URL=http://localhost:4141` 配置将所有模型请求路由到本地 `copilot-api`，无需 Anthropic API Key。
+4. OpenClaw 等其他支持 OpenAI 兼容接口的本地 Agent 方案，可用相同方式接入。
+5. 若需审计留存，可在 `copilot-api` 出站方向部署 mitmproxy，拦截并记录所有到 GitHub Copilot 服务的 HTTPS 请求/响应。
+
+### 10.3 部署步骤
+
+#### 10.3.1 基础部署（无审计）
+
+```bash
+# 1. 安装 copilot-api 和 Claude Code
+npm install -g copilot-api @anthropic-ai/claude-code
+
+# 2. 启动 copilot-api 并完成 GitHub 认证
+copilot-api start --proxy-env
+# 按提示访问 https://github.com/login/device 并输入设备码
+
+# 3. 配置 Claude Code（~/.claude/settings.json）
+cat > ~/.claude/settings.json << 'EOF'
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:4141",
+    "ANTHROPIC_AUTH_TOKEN": "sk-dummy",
+    "ANTHROPIC_MODEL": "claude-sonnet-4.5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5-mini",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
+  }
+}
+EOF
+
+# 4. 新终端中启动 Claude Code
+claude
+```
+
+#### 10.3.2 带审计留存的部署
+
+在 `copilot-api` 与 GitHub Copilot 云端之间加入 mitmproxy 层：
+
+```bash
+# 1. 部署 mitmproxy-copilot（参考第 9 章）
+docker build -t mitmproxy-copilot:v1 .
+docker run -d -p 8080:8080 \
+  -v /path/to/proxy-es.py:/app/proxy-es.py \
+  -e ES_HOST=https://elasticsearch.internal:9200 \
+  mitmproxy-copilot:v1
+
+# 2. 启动 copilot-api 时指定出站代理
+HTTPS_PROXY=http://localhost:8080 copilot-api start --proxy-env
+
+# 3. 在员工终端安装 mitmproxy 根证书（信任代理 TLS）
+# macOS:
+security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain mitmproxy-ca-cert.pem
+# Windows (企业应通过 GPO/MDM 下发):
+certutil -addstore root mitmproxy-ca-cert.cer
+
+# 4. Claude Code 配置不变，照常使用
+claude
+```
+
+### 10.4 适用工具
+
+| 工具 | 接入方式 | 说明 |
+| --- | --- | --- |
+| Claude Code | `ANTHROPIC_BASE_URL` 指向 `copilot-api` | 官方 CLI，功能完整 |
+| OpenClaw | OpenAI 兼容 base URL 指向 `copilot-api` | 本地 Agent Harness |
+| Aider | `--openai-api-base http://localhost:4141` | AI pair programming |
+| Cline (VS Code) | 配置 Copilot 为 LLM provider | VS Code 扩展已原生支持 |
+
+### 10.5 约束与风险
+
+1. **单终端限制**：每个 GitHub Copilot 账号同一时刻只能服务一个 `copilot-api` 实例。多终端并发使用同一账号会触发 GitHub 服务器侧异常行为检测，可能导致账号被临时或永久封禁。
+2. **不可池化**：该方案不适合多用户共享或服务端无人值守场景。每位员工必须使用自己的 Copilot 账号和独立 `copilot-api` 实例。
+3. **模型可用性依赖 GitHub**：可用模型列表、配额、速率限制由 GitHub Copilot 后端控制，客户无法自行扩容或保证 SLA。
+4. **合规前提**：GitHub 官方文档已说明通过 API 调用 Copilot 模型属于支持的用法（参考 [Copilot Extensions Agent 文档](https://docs.github.com/en/copilot/how-tos/build-copilot-extensions/building-a-copilot-agent-for-your-copilot-extension/using-copilots-llm-for-your-agent)），Aider、Cline 等工具已实现类似集成。但企业正式采用前仍需核实 GitHub Copilot 服务条款、企业协议和客户内部合规要求。
+5. **审计依赖 mitmproxy**：该方案不经过 LiteLLM，无法直接获得 LiteLLM 的 virtual key、team budget、spend logs 和集中式审计能力。如需 prompt 留存和审计，必须配合 mitmproxy 或同等审计代理（详见第 9 章）。
+6. **`copilot-api` 为社区项目**：生产采用前需完成源码审查、依赖扫描和版本固定，并评估项目维护状态和安全响应能力。
+
+### 10.6 与主方案对比
+
+| 维度 | 主方案（Claude Code + LiteLLM + Foundry） | 方案 B（Copilot 桥接 Claude Code） |
+| --- | --- | --- |
+| 模型供应 | 自建 Foundry 端点，容量可控 | 依赖 GitHub Copilot 后端 |
+| 多用户支持 | 1000+ 员工集中服务 | 单账号单终端 |
+| 模型类型 | Claude + GPT 全系列 | Copilot 开放的模型子集 |
+| 审计能力 | LiteLLM 原生日志 + Langfuse/OTel | 需额外部署 mitmproxy |
+| 成本治理 | virtual key / team budget / chargeback | 无集中成本治理 |
+| 部署复杂度 | 高（AKS/Redis/PG/Key Vault） | 低（本地 npm 包 + 可选 mitmproxy） |
+| 适用场景 | 企业全员 API 服务 | 少量高级用户 Vibe Coding |
+| 依赖条件 | Azure 订阅 + Foundry 配额 | GitHub Copilot 账号 |
+
+### 10.7 推荐使用策略
+
+1. 对全员规模化 API 服务，以主方案（LiteLLM + Foundry）为主。
+2. 对少数高级开发者或特殊项目需要快速获得 Claude Code 能力且不愿等待网关部署的，可作为过渡方案启用方案 B。
+3. 两种方案可并行运行：主方案服务 API 调用和自动化任务；方案 B 服务少数员工的本地 Vibe Coding 需求。
+4. 无论采用哪种方案，均应通过 mitmproxy 或同等机制实现 prompt 请求留存，满足企业审计要求。
+
+## 11. 安全、合规与治理
 
 1. 应用访问 LiteLLM 使用 virtual key，不直接访问底层模型端点。
 2. LiteLLM 到 Foundry 使用 Key Vault 管理密钥，定期轮换。
@@ -453,7 +603,7 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 8. GitHub Copilot 请求留存必须完成员工告知、授权、最小化采集、留存审批和访问审计；代理账号、证书和 Elasticsearch 凭据不得出现在仓库中。
 9. 定时任务账号池不得用于规避模型安全策略；异常重复 prompt、风控命中和供应商告警必须进入安全事件流程。
 
-## 11. 实施路线图
+## 12. 实施路线图
 
 | 阶段 | 周期 | 关键任务 | 退出标准 |
 | --- | --- | --- | --- |
@@ -463,7 +613,7 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 | 3. 生产试运行 | 2 周 | 接入试点团队，启用 virtual key、预算、审计，试点 Copilot 代理留存 | 100-200 人稳定使用，Copilot 审计链路可查询 |
 | 4. 全员上线 | 持续 | 扩展到 1000 人，建立容量日报和异常演练 | SLA、成本和审计指标达标 |
 
-## 12. 验证与演练
+## 13. 验证与演练
 
 1. 容量压测：逐步提升到单模型组 60%、80%、100% 规划容量。
 2. 故障演练：模拟单 subscription 429、单区域超时、单模型不可用、Vertex fallback。
@@ -474,8 +624,9 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 9. model_name 隔离验证：模拟某组端点被封禁，确认仅该组用户受影响，其他组可正常使用；确认 fallback 不跨组、只跨模型。
 7. 日志归档验证：夜间 DMS/ETL 任务能迁移 30 天以上日志，完成行数校验、查询回放和源端清理，且失败时不删除源数据。
 8. Copilot 留存验证：抽样确认 IDE 请求经代理写入 Elasticsearch/SIEM，证书、代理认证、用户映射和脱敏策略符合安全评审要求。
+10. Copilot 桥接 Claude Code 验证：确认 copilot-api 本地代理启动后 Claude Code 可正常调用模型；配合 mitmproxy 时验证 prompt 完整留存到 Elasticsearch/SIEM，且不影响模型交互延迟和功能。
 
-## 13. 资料核验说明
+## 14. 资料核验说明
 
 交付前建议再次核验以下官方来源，因为模型、区域、quota tier 和 MCP 能力更新较快：
 
@@ -487,3 +638,5 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 6. Vercel Docs：Vercel official MCP `https://mcp.vercel.com`、OAuth、supported clients、安全最佳实践。
 7. Model Context Protocol 官方文档与 MCP Registry：MCP 架构、reference servers、社区服务器发现与安全评估原则。
 8. mitmproxy 官方文档与 [nikawang/mitmproxy-copilot](https://github.com/nikawang/mitmproxy-copilot)：TLS 证书安装、代理模式、脚本扩展、Elasticsearch 写入方式、支持的 Copilot 端点和项目维护状态。
+9. GitHub Copilot Extensions / Agent 文档：[Using Copilot's LLM for your agent](https://docs.github.com/en/copilot/how-tos/build-copilot-extensions/building-a-copilot-agent-for-your-copilot-extension/using-copilots-llm-for-your-agent)、Copilot API 调用的官方支持声明。
+10. `copilot-api` npm 包与 [feiskyer/claude-code-settings](https://github.com/feiskyer/claude-code-settings/blob/main/guidances/github-copilot.md)：Claude Code 接入 GitHub Copilot 的配置指南、Device Flow 认证、可用模型列表。

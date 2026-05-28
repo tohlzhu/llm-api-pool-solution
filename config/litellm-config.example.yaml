@@ -696,8 +696,62 @@ model_list:
       full_content_logging: true
 
   # ============================================================
-  # Cross-cloud backup — not grouped (separate provider path)
+  # GPT Fast — 5 isolated groups (gpt-nano / gpt-mini), 2 endpoints per group
+  # Only Group 1 shown; replicate pattern for Groups 2-5.
   # ============================================================
+  # Group 1: subscriptions 01-02
+  - model_name: gpt-fast-1
+    litellm_params:
+      model: azure/gpt-nano
+      api_base: os.environ/AZURE_GPT_FOUNDRY_01_ENDPOINT
+      api_key: os.environ/AZURE_GPT_FOUNDRY_01_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 12000000
+      rpm: 10000
+      max_parallel_requests: 300
+      order: 1
+    model_info:
+      id: azure-foundry-01-gpt-fast
+      provider: azure-openai
+      base_model: azure/gpt-nano
+      isolation_group: 1
+      full_content_logging: true
+  - model_name: gpt-fast-1
+    litellm_params:
+      model: azure/gpt-nano
+      api_base: os.environ/AZURE_GPT_FOUNDRY_02_ENDPOINT
+      api_key: os.environ/AZURE_GPT_FOUNDRY_02_KEY
+      api_version: "2026-02-01-preview"
+      tpm: 12000000
+      rpm: 10000
+      max_parallel_requests: 300
+      order: 1
+    model_info:
+      id: azure-foundry-02-gpt-fast
+      provider: azure-openai
+      base_model: azure/gpt-nano
+      isolation_group: 1
+      full_content_logging: true
+
+  # ============================================================
+  # Cross-cloud backup — Vertex Claude (separate provider path, not grouped)
+  # Serves as same-model-type fallback for Foundry Claude before crossing to GPT.
+  # ============================================================
+  - model_name: vertex-claude-opus
+    litellm_params:
+      model: vertex_ai/claude-opus-4-7
+      vertex_project: os.environ/VERTEX_PROJECT_ID
+      vertex_location: os.environ/VERTEX_LOCATION
+      vertex_credentials: os.environ/VERTEX_CREDENTIALS_JSON
+      tpm: 500000
+      rpm: 1000
+      max_parallel_requests: 40
+      order: 2
+    model_info:
+      id: vertex-claude-opus-partner
+      provider: vertex-ai
+      base_model: claude-opus-4-7
+      full_content_logging: true
   - model_name: vertex-claude-sonnet
     litellm_params:
       model: vertex_ai/claude-sonnet-4-6
@@ -707,11 +761,26 @@ model_list:
       tpm: 1000000
       rpm: 2000
       max_parallel_requests: 80
-      order: 3
+      order: 2
     model_info:
       id: vertex-claude-sonnet-partner
       provider: vertex-ai
       base_model: claude-sonnet-4-6
+      full_content_logging: true
+  - model_name: vertex-claude-haiku
+    litellm_params:
+      model: vertex_ai/claude-haiku-4-5
+      vertex_project: os.environ/VERTEX_PROJECT_ID
+      vertex_location: os.environ/VERTEX_LOCATION
+      vertex_credentials: os.environ/VERTEX_CREDENTIALS_JSON
+      tpm: 2000000
+      rpm: 4000
+      max_parallel_requests: 120
+      order: 2
+    model_info:
+      id: vertex-claude-haiku-partner
+      provider: vertex-ai
+      base_model: claude-haiku-4-5
       full_content_logging: true
 
   # ============================================================
@@ -779,53 +848,54 @@ litellm_settings:
   redact_user_api_key_info: true
   global_disable_no_log_param: true
   store_prompts_in_spend_logs: true
-  # Fallbacks: cross-model within same group number, never cross-group for same model.
-  # This prevents policy-violation traffic from spreading to healthy groups.
+  # Fallbacks: Foundry Claude → Vertex Claude (same model type) → GPT (cross-model).
+  # Prioritizing same-model-type fallback keeps output consistency; GPT is last resort.
+  # Never cross-group for the same model — prevents policy-violation traffic spreading.
   fallbacks:
-    - claude-opus-1: ["claude-sonnet-1", "gpt-frontier-1", "vertex-claude-sonnet"]
-    - claude-opus-2: ["claude-sonnet-2", "gpt-frontier-2", "vertex-claude-sonnet"]
-    - claude-opus-3: ["claude-sonnet-3", "gpt-frontier-3", "vertex-claude-sonnet"]
-    - claude-opus-4: ["claude-sonnet-4", "gpt-frontier-4", "vertex-claude-sonnet"]
-    - claude-opus-5: ["claude-sonnet-5", "gpt-frontier-5", "vertex-claude-sonnet"]
-    - claude-sonnet-1: ["gpt-frontier-1", "vertex-claude-sonnet"]
-    - claude-sonnet-2: ["gpt-frontier-2", "vertex-claude-sonnet"]
-    - claude-sonnet-3: ["gpt-frontier-3", "vertex-claude-sonnet"]
-    - claude-sonnet-4: ["gpt-frontier-4", "vertex-claude-sonnet"]
-    - claude-sonnet-5: ["gpt-frontier-5", "vertex-claude-sonnet"]
-    - claude-haiku-1: ["claude-sonnet-1", "gpt-frontier-1"]
-    - claude-haiku-2: ["claude-sonnet-2", "gpt-frontier-2"]
-    - claude-haiku-3: ["claude-sonnet-3", "gpt-frontier-3"]
-    - claude-haiku-4: ["claude-sonnet-4", "gpt-frontier-4"]
-    - claude-haiku-5: ["claude-sonnet-5", "gpt-frontier-5"]
-    - gpt-frontier-1: ["claude-sonnet-1", "vertex-claude-sonnet"]
-    - gpt-frontier-2: ["claude-sonnet-2", "vertex-claude-sonnet"]
-    - gpt-frontier-3: ["claude-sonnet-3", "vertex-claude-sonnet"]
-    - gpt-frontier-4: ["claude-sonnet-4", "vertex-claude-sonnet"]
-    - gpt-frontier-5: ["claude-sonnet-5", "vertex-claude-sonnet"]
+    - claude-opus-1: ["vertex-claude-opus", "claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
+    - claude-opus-2: ["vertex-claude-opus", "claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
+    - claude-opus-3: ["vertex-claude-opus", "claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
+    - claude-opus-4: ["vertex-claude-opus", "claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
+    - claude-opus-5: ["vertex-claude-opus", "claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
+    - claude-sonnet-1: ["vertex-claude-sonnet", "gpt-frontier-1"]
+    - claude-sonnet-2: ["vertex-claude-sonnet", "gpt-frontier-2"]
+    - claude-sonnet-3: ["vertex-claude-sonnet", "gpt-frontier-3"]
+    - claude-sonnet-4: ["vertex-claude-sonnet", "gpt-frontier-4"]
+    - claude-sonnet-5: ["vertex-claude-sonnet", "gpt-frontier-5"]
+    - claude-haiku-1: ["vertex-claude-haiku", "claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
+    - claude-haiku-2: ["vertex-claude-haiku", "claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
+    - claude-haiku-3: ["vertex-claude-haiku", "claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
+    - claude-haiku-4: ["vertex-claude-haiku", "claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
+    - claude-haiku-5: ["vertex-claude-haiku", "claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
+    - gpt-frontier-1: ["gpt-fast-1", "claude-sonnet-1", "vertex-claude-sonnet"]
+    - gpt-frontier-2: ["gpt-fast-2", "claude-sonnet-2", "vertex-claude-sonnet"]
+    - gpt-frontier-3: ["gpt-fast-3", "claude-sonnet-3", "vertex-claude-sonnet"]
+    - gpt-frontier-4: ["gpt-fast-4", "claude-sonnet-4", "vertex-claude-sonnet"]
+    - gpt-frontier-5: ["gpt-fast-5", "claude-sonnet-5", "vertex-claude-sonnet"]
     - batch-claude-haiku: ["batch-gpt-nano", "batch-gemini-flash"]
     - batch-gpt-nano: ["batch-gemini-flash"]
   context_window_fallbacks:
-    - claude-haiku-1: ["claude-sonnet-1", "gpt-frontier-1"]
-    - claude-haiku-2: ["claude-sonnet-2", "gpt-frontier-2"]
-    - claude-haiku-3: ["claude-sonnet-3", "gpt-frontier-3"]
-    - claude-haiku-4: ["claude-sonnet-4", "gpt-frontier-4"]
-    - claude-haiku-5: ["claude-sonnet-5", "gpt-frontier-5"]
-    - claude-sonnet-1: ["claude-opus-1", "gpt-frontier-1"]
-    - claude-sonnet-2: ["claude-opus-2", "gpt-frontier-2"]
-    - claude-sonnet-3: ["claude-opus-3", "gpt-frontier-3"]
-    - claude-sonnet-4: ["claude-opus-4", "gpt-frontier-4"]
-    - claude-sonnet-5: ["claude-opus-5", "gpt-frontier-5"]
+    - claude-haiku-1: ["claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
+    - claude-haiku-2: ["claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
+    - claude-haiku-3: ["claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
+    - claude-haiku-4: ["claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
+    - claude-haiku-5: ["claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
+    - claude-sonnet-1: ["claude-opus-1", "vertex-claude-opus", "gpt-frontier-1"]
+    - claude-sonnet-2: ["claude-opus-2", "vertex-claude-opus", "gpt-frontier-2"]
+    - claude-sonnet-3: ["claude-opus-3", "vertex-claude-opus", "gpt-frontier-3"]
+    - claude-sonnet-4: ["claude-opus-4", "vertex-claude-opus", "gpt-frontier-4"]
+    - claude-sonnet-5: ["claude-opus-5", "vertex-claude-opus", "gpt-frontier-5"]
   content_policy_fallbacks:
-    - claude-sonnet-1: ["gpt-frontier-1"]
-    - claude-sonnet-2: ["gpt-frontier-2"]
-    - claude-sonnet-3: ["gpt-frontier-3"]
-    - claude-sonnet-4: ["gpt-frontier-4"]
-    - claude-sonnet-5: ["gpt-frontier-5"]
-    - claude-opus-1: ["gpt-frontier-1"]
-    - claude-opus-2: ["gpt-frontier-2"]
-    - claude-opus-3: ["gpt-frontier-3"]
-    - claude-opus-4: ["gpt-frontier-4"]
-    - claude-opus-5: ["gpt-frontier-5"]
+    - claude-sonnet-1: ["vertex-claude-sonnet", "gpt-frontier-1"]
+    - claude-sonnet-2: ["vertex-claude-sonnet", "gpt-frontier-2"]
+    - claude-sonnet-3: ["vertex-claude-sonnet", "gpt-frontier-3"]
+    - claude-sonnet-4: ["vertex-claude-sonnet", "gpt-frontier-4"]
+    - claude-sonnet-5: ["vertex-claude-sonnet", "gpt-frontier-5"]
+    - claude-opus-1: ["vertex-claude-opus", "gpt-frontier-1"]
+    - claude-opus-2: ["vertex-claude-opus", "gpt-frontier-2"]
+    - claude-opus-3: ["vertex-claude-opus", "gpt-frontier-3"]
+    - claude-opus-4: ["vertex-claude-opus", "gpt-frontier-4"]
+    - claude-opus-5: ["vertex-claude-opus", "gpt-frontier-5"]
 
 router_settings:
   routing_strategy: simple-shuffle

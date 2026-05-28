@@ -1,22 +1,15 @@
 # TODO
 
-按照下面罗列的要求在现有设计文件 `llm-api-pool-solution.md` 基础上增加描述，注意酌情更新不同段落。
+按照下面罗列的要求更新设计文件 `llm-api-pool-solution.md` 和其他相关脚本、配置示例代码。
 
-## 方案要求
+## 更新要求
 
-1. 考虑到 Claude 模型访问时有严格的服务器端安全检查规则，大量重复 prompt 可能导致云端安全扫描判定该端点用于非法业务进而关闭访问权限，需要在账号池上增加冗余设计：
-    - 为客户业务中的定时任务创建单独的账号池，实现方面需要增加专门的若干订阅（比如5个）开出 Claude/GPT 模型的端点，在 litellm 中也应该隔离出独立的 group 用于定时任务；
-    - 在文档中增加建议，要求客户向用户宣传执行定时任务时要指定上述 litellm 中的特定 group，并且原则上要用 gpt-nano/gemini-flash/claude-haiku 这类低成本模型；
-2. litellm 中的日志在 pg 数据库保存数量太多会严重影响性能，建议创建 DMS 定期任务在夜间把30天以上数据转移到 clickhouse/elasticsearch；
-3. 客户需要对 github copilot 中的所有请求做留存，以便审计和后期做数据分析，这个可以通过 [mitmproxy-copilot](https://github.com/nikawang/mitmproxy-copilot) 实现，请阅读该项目介绍信息，把原理和操作方法、项目地址放在 solution 中做单独章节；
+1. 文档涉及 GPT 模型的地方，开发用的统一建议 GPT 5.4/5.5，处理数据的低成本模型建议 gpt-nano/gpt-mini，请据此更新所有描述和脚本所举例的模型；
+2. litellm 有 fallback 的配置项，可以设计为首选 foundry Claude 为后端端点的模型其 fallback 模型为 GCP Claude 端点，这样模型类型一致，避免 fallback 后工作异常，也保证了优先使用 foundry 模型；请按照这个逻辑更新全文的多级备份逻辑，更新脚本、配置示例；
+3. github copilot 还有一个特殊用法，参考这个链接 [Claude Code with GitHub Copilot as Model Provider](https://github.com/feiskyer/claude-code-settings/blob/main/guidances/github-copilot.md#claude-code-with-github-copilot-as-model-provider)，如果客户需要继续使用 Claude Code 作为 Harness 方案，可以考虑通过此链接的方法将本地 github copilot 的模型接口桥接到本地 Claude Code 环境，事实上这个也可以支持接入到 OpenClaw 一类的本地 Agent 方案，但是都需要客户有 github copilot 账号，且只能服务于一个终端，以避免 github copilot 服务器侧认定行为异常而 block 账号。请把这个用法作为单独一个章节体现在解决方案中，配合 mitmproxy 实现 prompt 留存，此方法应视为与 Claude Code + Litellm + Foundry Claude endpoint 同一个级别的 vibe coding 软件解决方案。（注意此用法相对特殊，请增加一个专门的架构图表达意思）
 
 ## 输出文件
 
-如有必要，更新以下文件或按需增加配置示例文件，
-
-1. `llm-api-pool-solution.md`：主解决方案文档，Markdown 格式，中文。
-2. `scripts/create-foundry-pool.sh`：Azure CLI/Linux 参考自动化脚本。
-3. `config/litellm-config.example.yaml`：LiteLLM 示例配置。
-4. `.vscode/mcp.example.json`：VS Code / GitHub Copilot 本地 MCP 示例配置。
+如有必要，更新相关 markdown 文件或按需调整配置示例文件。
 
 请注意发挥主动性寻找最新素材，并通过多个渠道核实准确性。所有脚本和配置均使用占位符，不写入真实租户 ID、密钥、token 或客户敏感信息。

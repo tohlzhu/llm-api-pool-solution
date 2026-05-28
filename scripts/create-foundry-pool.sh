@@ -21,9 +21,9 @@ OUT_DIR="${OUT_DIR:-./generated}"
 DRY_RUN="${DRY_RUN:-false}"
 
 CLAUDE_MODELS=("claude-opus-4-7" "claude-sonnet-4-6" "claude-haiku-4-5")
-GPT_MODELS=("gpt-4o" "gpt-4o-mini")
+GPT_MODELS=("gpt-5.5" "gpt-5.4")
 BATCH_CLAUDE_MODELS=("claude-haiku-4-5")
-BATCH_GPT_MODELS=("gpt-4o-mini")
+BATCH_GPT_MODELS=("gpt-nano" "gpt-mini")
 
 # ---------- CLI argument parsing ----------
 
@@ -291,7 +291,14 @@ create_foundry_resources() {
   if [[ "$DEPLOY_GPT_MODELS" == "true" ]]; then
     for model_name in "${gpt_list[@]}"; do
       local deploy_name="${model_name//./-}"
-      local capacity=10000
+      local capacity
+      case "$model_name" in
+        gpt-5.5)   capacity=10000 ;;
+        gpt-5.4)   capacity=10000 ;;
+        gpt-nano)  capacity=15000 ;;
+        gpt-mini)  capacity=15000 ;;
+        *)         capacity=10000 ;;
+      esac
       deploy_model "$resource_group" "$account_name" "${deploy_name}" "${model_name}" "OpenAI" "GlobalStandard" "$capacity"
     done
   fi
