@@ -417,6 +417,7 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 5. Foundry 资源删除后有 48 小时软删除窗口期，`delete-resources.sh` 默认执行清除以支持立即重建。
 6. Claude 部署使用 REST API（api-version `2025-10-01-preview`）以支持 `modelProviderData` 字段；GPT 和 DeepSeek 使用标准 `az cognitiveservices` CLI。
 7. 跨订阅 quota 是共享的（如 GPT GlobalStandard quota 按区域聚合），需确保总部署容量不超过租户级别配额限制。
+8. 当 Azure Policy 强制 `disableLocalAuth=true` 时，API Key 不可用。`deploy-models.sh` 会自动为当前用户分配 `Cognitive Services OpenAI User` 角色，端点测试通过 Azure AD Bearer Token 认证。`test-endpoints.sh` 自动识别 JWT token 并使用 `Authorization: Bearer` 头部。
 
 ### 7.7 实际命令举例
 

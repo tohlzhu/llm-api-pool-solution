@@ -86,6 +86,20 @@ is_deepseek_model() {
   [[ "$1" == DeepSeek-* || "$1" == deepseek-* ]]
 }
 
+is_bearer_token() {
+  # Bearer tokens (JWT) are much longer than API keys and contain dots
+  [[ ${#1} -gt 100 && "$1" == *"."* ]]
+}
+
+get_auth_header() {
+  local api_key="$1"
+  if is_bearer_token "$api_key"; then
+    echo "Authorization: Bearer ${api_key}"
+  else
+    echo "api-key: ${api_key}"
+  fi
+}
+
 # ---------- Test functions ----------
 
 test_openai_compatible() {
@@ -98,15 +112,18 @@ test_openai_compatible() {
   # We need to use the chat completions path
   local url="${base_url}/chat/completions?api-version=2024-12-01-preview"
 
+  local auth_header
+  auth_header="$(get_auth_header "$api_key")"
+
   local response
   response="$(curl -s -w "\n%{http_code}" \
     --max-time "$TIMEOUT" \
     "$url" \
-    -H "api-key: ${api_key}" \
+    -H "${auth_header}" \
     -H "Content-Type: application/json" \
     -d "{
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
-      \"max_tokens\": ${MAX_TOKENS}
+      \"max_completion_tokens\": ${MAX_TOKENS}
     }" 2>/dev/null)" || {
     echo "  FAIL: Connection error for $model_name"
     return 1
@@ -143,11 +160,14 @@ test_claude_native() {
   base_url="$(echo "$endpoint" | sed 's|/openai/deployments/.*||')"
   local url="${base_url}/anthropic/v1/messages"
 
+  local auth_header
+  auth_header="$(get_auth_header "$api_key")"
+
   local response
   response="$(curl -s -w "\n%{http_code}" \
     --max-time "$TIMEOUT" \
     "$url" \
-    -H "api-key: ${api_key}" \
+    -H "${auth_header}" \
     -H "Content-Type: application/json" \
     -d "{
       \"model\": \"${model_name}\",

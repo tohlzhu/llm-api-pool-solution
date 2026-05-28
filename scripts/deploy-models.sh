@@ -188,6 +188,21 @@ create_foundry_resource() {
       --output none --only-show-errors
   fi
 
+  # Assign Cognitive Services OpenAI User role to deploying user.
+  # Required when Azure Policy enforces disableLocalAuth=true.
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local user_id
+    user_id="$(az ad signed-in-user show --query id -o tsv --only-show-errors 2>/dev/null || true)"
+    if [[ -n "$user_id" ]]; then
+      local scope="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${account_name}"
+      az role assignment create \
+        --assignee "$user_id" \
+        --role "Cognitive Services OpenAI User" \
+        --scope "$scope" \
+        --only-show-errors --output none 2>/dev/null || true
+    fi
+  fi
+
   echo "$account_name"
 }
 
@@ -209,11 +224,19 @@ get_access_key() {
   local resource_group="$2"
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "dry-run-key-placeholder"
+    return 0
+  fi
+  # Try key-based access first; if blocked (disableLocalAuth), get bearer token
+  local key
+  key="$(az cognitiveservices account keys list \
+    --name "$account_name" \
+    --resource-group "$resource_group" \
+    --query key1 -o tsv --only-show-errors 2>/dev/null || true)"
+  if [[ -n "$key" ]]; then
+    echo "$key"
   else
-    az cognitiveservices account keys list \
-      --name "$account_name" \
-      --resource-group "$resource_group" \
-      --query key1 -o tsv --only-show-errors 2>/dev/null || echo ""
+    az account get-access-token --resource https://cognitiveservices.azure.com \
+      --query accessToken -o tsv --only-show-errors 2>/dev/null || echo ""
   fi
 }
 
@@ -373,7 +396,8 @@ main() {
 
   local line_num=0
 
-  while IFS=',' read -r subscription_id subscription_name prefix model_type location anthropic_org anthropic_industry anthropic_country; do
+  # Use file descriptor 3 to avoid az commands consuming stdin from the while-read loop
+  while IFS=',' read -r subscription_id subscription_name prefix model_type location anthropic_org anthropic_industry anthropic_country <&3; do
     line_num=$((line_num + 1))
     # Skip header
     if [[ "$line_num" -eq 1 ]]; then
@@ -454,7 +478,7 @@ main() {
         >> "$output_csv"
     done
 
-  done < "$INPUT_FILE"
+  done 3< "$INPUT_FILE"
 
   log "=== Deployment complete ==="
   log "Endpoint inventory: $output_csv"
