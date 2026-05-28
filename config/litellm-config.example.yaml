@@ -1,741 +1,644 @@
 # LiteLLM production-oriented example for a multi-subscription Foundry + Vertex pool.
-# Demonstrates model_name isolation: 10 Foundry endpoints split into 5 groups (2 endpoints each)
-# to contain policy-violation blast radius. Replace placeholders with Key Vault-backed env vars.
+#
+# Naming convention per main document (section 6.1):
+#   claude-opus-4-7-grp{1..5}    — 10 Claude subscriptions split into 5 groups (2 per group)
+#   claude-sonnet-4-6-grp{1..5}  — same 10 subscriptions, Sonnet endpoints
+#   claude-haiku-4-5-grp{1..5}   — same 10 subscriptions, Haiku endpoints
+#   gpt-5.5-grp{1..5}            — 5 GPT subscriptions, 1 per group
+#   gpt-5.4-grp{1..5}            — same 5 subscriptions
+#   gpt-5.4-mini-grp{1..5}       — same 5 subscriptions
+#   gpt-5.4-nano-grp{1..5}       — same 5 subscriptions
+#   DeepSeek-V4-Pro-grp1         — 1 DeepSeek subscription
+#   DeepSeek-V4-Flash-grp1       — same subscription
+#   batch-gpt-5.5-grp{1..2}      — 2 batch GPT subscriptions
+#   batch-gpt-5.4-grp{1..2}      — same 2 subscriptions
+#   batch-gpt-5.4-mini-grp{1..2} — same 2 subscriptions
+#   batch-gpt-5.4-nano-grp{1..2} — same 2 subscriptions
+#
+# Each subscription hosts ONE model family only (Claude OR GPT OR DeepSeek).
+# Replace placeholders with Key Vault-backed env vars.
 
 model_list:
   # ============================================================
+  # Claude Opus — 5 isolated groups, 2 Claude endpoints per group
+  # Subscriptions: llmpool-claude-sub1..sub10
+  # ============================================================
+  # Group 1: sub1 + sub2
+  - model_name: claude-opus-4-7-grp1
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB01_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub01-opus
+      base_model: claude-opus-4-7
+      isolation_group: 1
+  - model_name: claude-opus-4-7-grp1
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB02_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub02-opus
+      base_model: claude-opus-4-7
+      isolation_group: 1
+
+  # Group 2: sub3 + sub4
+  - model_name: claude-opus-4-7-grp2
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB03_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub03-opus
+      base_model: claude-opus-4-7
+      isolation_group: 2
+  - model_name: claude-opus-4-7-grp2
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB04_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub04-opus
+      base_model: claude-opus-4-7
+      isolation_group: 2
+
+  # Group 3: sub5 + sub6
+  - model_name: claude-opus-4-7-grp3
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB05_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub05-opus
+      base_model: claude-opus-4-7
+      isolation_group: 3
+  - model_name: claude-opus-4-7-grp3
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB06_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB06_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub06-opus
+      base_model: claude-opus-4-7
+      isolation_group: 3
+
+  # Group 4: sub7 + sub8
+  - model_name: claude-opus-4-7-grp4
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB07_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB07_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub07-opus
+      base_model: claude-opus-4-7
+      isolation_group: 4
+  - model_name: claude-opus-4-7-grp4
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB08_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB08_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub08-opus
+      base_model: claude-opus-4-7
+      isolation_group: 4
+
+  # Group 5: sub9 + sub10
+  - model_name: claude-opus-4-7-grp5
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB09_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB09_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub09-opus
+      base_model: claude-opus-4-7
+      isolation_group: 5
+  - model_name: claude-opus-4-7-grp5
+    litellm_params:
+      model: azure_ai/claude-opus-4-7
+      api_base: os.environ/AZURE_CLAUDE_SUB10_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB10_KEY
+      tpm: 1800000
+      rpm: 2000
+      max_parallel_requests: 80
+    model_info:
+      id: claude-sub10-opus
+      base_model: claude-opus-4-7
+      isolation_group: 5
+
+  # ============================================================
   # Claude Sonnet — 5 isolated groups, 2 endpoints per group
+  # Same Claude subscriptions (sub1..sub10)
   # ============================================================
-  # Group 1: subscriptions 01-02
-  - model_name: claude-sonnet-1
+  # Group 1: sub1 + sub2
+  - model_name: claude-sonnet-4-6-grp1
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB01_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-01-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub01-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 1
-      full_content_logging: true
-  - model_name: claude-sonnet-1
+  - model_name: claude-sonnet-4-6-grp1
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_02_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB02_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-02-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub02-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 1
-      full_content_logging: true
 
-  # Group 2: subscriptions 03-04
-  - model_name: claude-sonnet-2
+  # Group 2: sub3 + sub4
+  - model_name: claude-sonnet-4-6-grp2
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_03_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_03_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB03_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-03-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub03-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 2
-      full_content_logging: true
-  - model_name: claude-sonnet-2
+  - model_name: claude-sonnet-4-6-grp2
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_04_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_04_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB04_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-04-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub04-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 2
-      full_content_logging: true
 
-  # Group 3: subscriptions 05-06
-  - model_name: claude-sonnet-3
+  # Group 3: sub5 + sub6
+  - model_name: claude-sonnet-4-6-grp3
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_05_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_05_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB05_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-05-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub05-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 3
-      full_content_logging: true
-  - model_name: claude-sonnet-3
+  - model_name: claude-sonnet-4-6-grp3
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_06_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_06_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB06_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB06_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-06-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub06-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 3
-      full_content_logging: true
 
-  # Group 4: subscriptions 07-08
-  - model_name: claude-sonnet-4
+  # Group 4: sub7 + sub8
+  - model_name: claude-sonnet-4-6-grp4
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_07_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_07_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB07_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB07_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-07-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub07-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 4
-      full_content_logging: true
-  - model_name: claude-sonnet-4
+  - model_name: claude-sonnet-4-6-grp4
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_08_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_08_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB08_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB08_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-08-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub08-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 4
-      full_content_logging: true
 
-  # Group 5: subscriptions 09-10
-  - model_name: claude-sonnet-5
+  # Group 5: sub9 + sub10
+  - model_name: claude-sonnet-4-6-grp5
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_09_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_09_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB09_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB09_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-09-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub09-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 5
-      full_content_logging: true
-  - model_name: claude-sonnet-5
+  - model_name: claude-sonnet-4-6-grp5
     litellm_params:
       model: azure_ai/claude-sonnet-4-6
-      api_base: os.environ/AZURE_FOUNDRY_10_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_10_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB10_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB10_KEY
       tpm: 3600000
       rpm: 4000
       max_parallel_requests: 120
-      order: 1
     model_info:
-      id: azure-foundry-10-claude-sonnet
-      provider: azure-foundry
+      id: claude-sub10-sonnet
       base_model: claude-sonnet-4-6
       isolation_group: 5
-      full_content_logging: true
-
-  # ============================================================
-  # Claude Opus — 5 isolated groups, 2 endpoints per group
-  # ============================================================
-  # Group 1: subscriptions 01-02
-  - model_name: claude-opus-1
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-01-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 1
-      full_content_logging: true
-  - model_name: claude-opus-1
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_02_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-02-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 1
-      full_content_logging: true
-
-  # Group 2: subscriptions 03-04
-  - model_name: claude-opus-2
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_03_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_03_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-03-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 2
-      full_content_logging: true
-  - model_name: claude-opus-2
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_04_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_04_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-04-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 2
-      full_content_logging: true
-
-  # Group 3: subscriptions 05-06
-  - model_name: claude-opus-3
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_05_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_05_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-05-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 3
-      full_content_logging: true
-  - model_name: claude-opus-3
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_06_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_06_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-06-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 3
-      full_content_logging: true
-
-  # Group 4: subscriptions 07-08
-  - model_name: claude-opus-4
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_07_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_07_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-07-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 4
-      full_content_logging: true
-  - model_name: claude-opus-4
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_08_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_08_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-08-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 4
-      full_content_logging: true
-
-  # Group 5: subscriptions 09-10
-  - model_name: claude-opus-5
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_09_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_09_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-09-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 5
-      full_content_logging: true
-  - model_name: claude-opus-5
-    litellm_params:
-      model: azure_ai/claude-opus-4-7
-      api_base: os.environ/AZURE_FOUNDRY_10_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_10_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 1800000
-      rpm: 2000
-      max_parallel_requests: 80
-      order: 1
-    model_info:
-      id: azure-foundry-10-claude-opus
-      provider: azure-foundry
-      base_model: claude-opus-4-7
-      isolation_group: 5
-      full_content_logging: true
 
   # ============================================================
   # Claude Haiku — 5 isolated groups, 2 endpoints per group
+  # Same Claude subscriptions (sub1..sub10)
   # ============================================================
-  # Group 1: subscriptions 01-02
-  - model_name: claude-haiku-1
+  # Group 1: sub1 + sub2
+  - model_name: claude-haiku-4-5-grp1
     litellm_params:
       model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB01_KEY
       tpm: 3600000
       rpm: 6000
       max_parallel_requests: 180
-      order: 1
     model_info:
-      id: azure-foundry-01-claude-haiku
-      provider: azure-foundry
+      id: claude-sub01-haiku
       base_model: claude-haiku-4-5
       isolation_group: 1
-      full_content_logging: true
-  - model_name: claude-haiku-1
+  - model_name: claude-haiku-4-5-grp1
     litellm_params:
       model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_02_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_CLAUDE_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB02_KEY
       tpm: 3600000
       rpm: 6000
       max_parallel_requests: 180
-      order: 1
     model_info:
-      id: azure-foundry-02-claude-haiku
-      provider: azure-foundry
+      id: claude-sub02-haiku
       base_model: claude-haiku-4-5
       isolation_group: 1
-      full_content_logging: true
 
-  # Group 2: subscriptions 03-04
-  - model_name: claude-haiku-2
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_03_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_03_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-03-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 2
-      full_content_logging: true
-  - model_name: claude-haiku-2
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_04_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_04_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-04-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 2
-      full_content_logging: true
-
-  # Group 3: subscriptions 05-06
-  - model_name: claude-haiku-3
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_05_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_05_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-05-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 3
-      full_content_logging: true
-  - model_name: claude-haiku-3
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_06_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_06_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-06-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 3
-      full_content_logging: true
-
-  # Group 4: subscriptions 07-08
-  - model_name: claude-haiku-4
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_07_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_07_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-07-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 4
-      full_content_logging: true
-  - model_name: claude-haiku-4
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_08_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_08_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-08-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 4
-      full_content_logging: true
-
-  # Group 5: subscriptions 09-10
-  - model_name: claude-haiku-5
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_09_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_09_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-09-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 5
-      full_content_logging: true
-  - model_name: claude-haiku-5
-    litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_FOUNDRY_10_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_10_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 3600000
-      rpm: 6000
-      max_parallel_requests: 180
-      order: 1
-    model_info:
-      id: azure-foundry-10-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
-      isolation_group: 5
-      full_content_logging: true
+  # Groups 2-5: replicate pattern for sub3..sub10 (omitted for brevity)
 
   # ============================================================
-  # GPT Frontier — 5 isolated groups, 2 endpoints per group
+  # GPT 5.5 — 5 isolated groups, 1 GPT endpoint per group
+  # Subscriptions: llmpool-gpt-sub1..sub5 (codex workload)
   # ============================================================
-  # Group 1: subscriptions 01-02
-  - model_name: gpt-frontier-1
+  # Group 1: gpt-sub1
+  - model_name: gpt-5.5-grp1
     litellm_params:
       model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB01_KEY
+      api_version: "2026-04-24"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-01-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub01-5.5
+      base_model: gpt-5.5
       isolation_group: 1
-      full_content_logging: true
-  - model_name: gpt-frontier-1
+
+  # Group 2: gpt-sub2
+  - model_name: gpt-5.5-grp2
     litellm_params:
       model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_02_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_02_KEY
-      api_version: "2026-02-01-preview"
+      api_base: os.environ/AZURE_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB02_KEY
+      api_version: "2026-04-24"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-02-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub02-5.5
+      base_model: gpt-5.5
+      isolation_group: 2
+
+  # Group 3: gpt-sub3
+  - model_name: gpt-5.5-grp3
+    litellm_params:
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_GPT_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB03_KEY
+      api_version: "2026-04-24"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+    model_info:
+      id: gpt-sub03-5.5
+      base_model: gpt-5.5
+      isolation_group: 3
+
+  # Group 4: gpt-sub4
+  - model_name: gpt-5.5-grp4
+    litellm_params:
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_GPT_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB04_KEY
+      api_version: "2026-04-24"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+    model_info:
+      id: gpt-sub04-5.5
+      base_model: gpt-5.5
+      isolation_group: 4
+
+  # Group 5: gpt-sub5
+  - model_name: gpt-5.5-grp5
+    litellm_params:
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_GPT_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB05_KEY
+      api_version: "2026-04-24"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+    model_info:
+      id: gpt-sub05-5.5
+      base_model: gpt-5.5
+      isolation_group: 5
+
+  # ============================================================
+  # GPT 5.4 — 5 isolated groups, 1 endpoint per group
+  # Same GPT subscriptions (gpt-sub1..sub5)
+  # ============================================================
+  - model_name: gpt-5.4-grp1
+    litellm_params:
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB01_KEY
+      api_version: "2026-03-05"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 200
+    model_info:
+      id: gpt-sub01-5.4
+      base_model: gpt-5.4
       isolation_group: 1
-      full_content_logging: true
-
-  # Group 2: subscriptions 03-04
-  - model_name: gpt-frontier-2
+  - model_name: gpt-5.4-grp2
     litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_03_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_03_KEY
-      api_version: "2026-02-01-preview"
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB02_KEY
+      api_version: "2026-03-05"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-03-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub02-5.4
+      base_model: gpt-5.4
       isolation_group: 2
-      full_content_logging: true
-  - model_name: gpt-frontier-2
+  - model_name: gpt-5.4-grp3
     litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_04_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_04_KEY
-      api_version: "2026-02-01-preview"
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_GPT_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB03_KEY
+      api_version: "2026-03-05"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-04-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
-      isolation_group: 2
-      full_content_logging: true
-
-  # Group 3: subscriptions 05-06
-  - model_name: gpt-frontier-3
-    litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_05_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_05_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 9000000
-      rpm: 8000
-      max_parallel_requests: 200
-      order: 1
-    model_info:
-      id: azure-foundry-05-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub03-5.4
+      base_model: gpt-5.4
       isolation_group: 3
-      full_content_logging: true
-  - model_name: gpt-frontier-3
+  - model_name: gpt-5.4-grp4
     litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_06_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_06_KEY
-      api_version: "2026-02-01-preview"
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_GPT_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB04_KEY
+      api_version: "2026-03-05"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-06-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
-      isolation_group: 3
-      full_content_logging: true
-
-  # Group 4: subscriptions 07-08
-  - model_name: gpt-frontier-4
-    litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_07_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_07_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 9000000
-      rpm: 8000
-      max_parallel_requests: 200
-      order: 1
-    model_info:
-      id: azure-foundry-07-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub04-5.4
+      base_model: gpt-5.4
       isolation_group: 4
-      full_content_logging: true
-  - model_name: gpt-frontier-4
+  - model_name: gpt-5.4-grp5
     litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_08_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_08_KEY
-      api_version: "2026-02-01-preview"
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_GPT_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB05_KEY
+      api_version: "2026-03-05"
       tpm: 9000000
       rpm: 8000
       max_parallel_requests: 200
-      order: 1
     model_info:
-      id: azure-foundry-08-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
-      isolation_group: 4
-      full_content_logging: true
-
-  # Group 5: subscriptions 09-10
-  - model_name: gpt-frontier-5
-    litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_09_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_09_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 9000000
-      rpm: 8000
-      max_parallel_requests: 200
-      order: 1
-    model_info:
-      id: azure-foundry-09-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
+      id: gpt-sub05-5.4
+      base_model: gpt-5.4
       isolation_group: 5
-      full_content_logging: true
-  - model_name: gpt-frontier-5
-    litellm_params:
-      model: azure/gpt-5.5
-      api_base: os.environ/AZURE_FOUNDRY_10_ENDPOINT
-      api_key: os.environ/AZURE_FOUNDRY_10_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 9000000
-      rpm: 8000
-      max_parallel_requests: 200
-      order: 1
-    model_info:
-      id: azure-foundry-10-gpt-frontier
-      provider: azure-openai
-      base_model: azure/gpt-5.5
-      isolation_group: 5
-      full_content_logging: true
 
   # ============================================================
-  # GPT Fast — 5 isolated groups (gpt-nano / gpt-mini), 2 endpoints per group
-  # Only Group 1 shown; replicate pattern for Groups 2-5.
+  # GPT 5.4-mini — 5 isolated groups
   # ============================================================
-  # Group 1: subscriptions 01-02
-  - model_name: gpt-fast-1
+  - model_name: gpt-5.4-mini-grp1
     litellm_params:
-      model: azure/gpt-nano
-      api_base: os.environ/AZURE_GPT_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_GPT_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 12000000
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB01_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
       rpm: 10000
       max_parallel_requests: 300
-      order: 1
     model_info:
-      id: azure-foundry-01-gpt-fast
-      provider: azure-openai
-      base_model: azure/gpt-nano
+      id: gpt-sub01-5.4-mini
+      base_model: gpt-5.4-mini
       isolation_group: 1
-      full_content_logging: true
-  - model_name: gpt-fast-1
+  - model_name: gpt-5.4-mini-grp2
     litellm_params:
-      model: azure/gpt-nano
-      api_base: os.environ/AZURE_GPT_FOUNDRY_02_ENDPOINT
-      api_key: os.environ/AZURE_GPT_FOUNDRY_02_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 12000000
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB02_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
       rpm: 10000
       max_parallel_requests: 300
-      order: 1
     model_info:
-      id: azure-foundry-02-gpt-fast
-      provider: azure-openai
-      base_model: azure/gpt-nano
-      isolation_group: 1
-      full_content_logging: true
+      id: gpt-sub02-5.4-mini
+      base_model: gpt-5.4-mini
+      isolation_group: 2
+  - model_name: gpt-5.4-mini-grp3
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_GPT_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB03_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub03-5.4-mini
+      base_model: gpt-5.4-mini
+      isolation_group: 3
+  - model_name: gpt-5.4-mini-grp4
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_GPT_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB04_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub04-5.4-mini
+      base_model: gpt-5.4-mini
+      isolation_group: 4
+  - model_name: gpt-5.4-mini-grp5
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_GPT_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB05_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub05-5.4-mini
+      base_model: gpt-5.4-mini
+      isolation_group: 5
 
   # ============================================================
-  # Cross-cloud backup — Vertex Claude (separate provider path, not grouped)
-  # Serves as same-model-type fallback for Foundry Claude before crossing to GPT.
+  # GPT 5.4-nano — 5 isolated groups
+  # ============================================================
+  - model_name: gpt-5.4-nano-grp1
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB01_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub01-5.4-nano
+      base_model: gpt-5.4-nano
+      isolation_group: 1
+  - model_name: gpt-5.4-nano-grp2
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB02_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub02-5.4-nano
+      base_model: gpt-5.4-nano
+      isolation_group: 2
+  - model_name: gpt-5.4-nano-grp3
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_GPT_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB03_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub03-5.4-nano
+      base_model: gpt-5.4-nano
+      isolation_group: 3
+  - model_name: gpt-5.4-nano-grp4
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_GPT_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB04_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub04-5.4-nano
+      base_model: gpt-5.4-nano
+      isolation_group: 4
+  - model_name: gpt-5.4-nano-grp5
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_GPT_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_GPT_SUB05_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 300
+    model_info:
+      id: gpt-sub05-5.4-nano
+      base_model: gpt-5.4-nano
+      isolation_group: 5
+
+  # ============================================================
+  # DeepSeek — 1 subscription, 1 group
+  # Subscription: llmpool-deepseek-sub1
+  # ============================================================
+  - model_name: DeepSeek-V4-Pro-grp1
+    litellm_params:
+      model: azure_ai/DeepSeek-V4-Pro
+      api_base: os.environ/AZURE_DS_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_DS_SUB01_KEY
+      tpm: 9000000
+      rpm: 4000
+      max_parallel_requests: 120
+    model_info:
+      id: ds-sub01-v4-pro
+      base_model: DeepSeek-V4-Pro
+      isolation_group: 1
+
+  - model_name: DeepSeek-V4-Flash-grp1
+    litellm_params:
+      model: azure_ai/DeepSeek-V4-Flash
+      api_base: os.environ/AZURE_DS_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_DS_SUB01_KEY
+      tpm: 9000000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: ds-sub01-v4-flash
+      base_model: DeepSeek-V4-Flash
+      isolation_group: 1
+
+  # ============================================================
+  # Vertex Claude — cross-cloud backup (not grouped)
+  # Serves as same-model-type fallback before crossing to GPT.
   # ============================================================
   - model_name: vertex-claude-opus
     litellm_params:
@@ -746,12 +649,10 @@ model_list:
       tpm: 500000
       rpm: 1000
       max_parallel_requests: 40
-      order: 2
     model_info:
-      id: vertex-claude-opus-partner
-      provider: vertex-ai
+      id: vertex-claude-opus
       base_model: claude-opus-4-7
-      full_content_logging: true
+
   - model_name: vertex-claude-sonnet
     litellm_params:
       model: vertex_ai/claude-sonnet-4-6
@@ -761,12 +662,10 @@ model_list:
       tpm: 1000000
       rpm: 2000
       max_parallel_requests: 80
-      order: 2
     model_info:
-      id: vertex-claude-sonnet-partner
-      provider: vertex-ai
+      id: vertex-claude-sonnet
       base_model: claude-sonnet-4-6
-      full_content_logging: true
+
   - model_name: vertex-claude-haiku
     litellm_params:
       model: vertex_ai/claude-haiku-4-5
@@ -776,66 +675,121 @@ model_list:
       tpm: 2000000
       rpm: 4000
       max_parallel_requests: 120
-      order: 2
     model_info:
-      id: vertex-claude-haiku-partner
-      provider: vertex-ai
+      id: vertex-claude-haiku
       base_model: claude-haiku-4-5
-      full_content_logging: true
 
   # ============================================================
-  # Batch pool — separate subscriptions, inherently isolated
+  # Batch pool — 2 dedicated GPT subscriptions (llmpool-gpt-sub6, sub7)
+  # Inherently isolated from interactive pool.
   # ============================================================
-  - model_name: batch-claude-haiku
+  # Batch Group 1: gpt-sub6
+  - model_name: batch-gpt-5.5-grp1
     litellm_params:
-      model: azure_ai/claude-haiku-4-5
-      api_base: os.environ/AZURE_BATCH_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_BATCH_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 2500000
-      rpm: 3000
-      max_parallel_requests: 80
-      order: 1
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_BATCH_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB01_KEY
+      api_version: "2026-04-24"
+      tpm: 9000000
+      rpm: 6000
+      max_parallel_requests: 120
     model_info:
-      id: azure-batch-foundry-01-claude-haiku
-      provider: azure-foundry
-      base_model: claude-haiku-4-5
+      id: batch-gpt-sub01-5.5
+      base_model: gpt-5.5
       workload_type: scheduled-batch
-      full_content_logging: true
-
-  - model_name: batch-gpt-nano
+  - model_name: batch-gpt-5.4-grp1
+    litellm_params:
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_BATCH_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB01_KEY
+      api_version: "2026-03-05"
+      tpm: 9000000
+      rpm: 6000
+      max_parallel_requests: 120
+    model_info:
+      id: batch-gpt-sub01-5.4
+      base_model: gpt-5.4
+      workload_type: scheduled-batch
+  - model_name: batch-gpt-5.4-mini-grp1
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_BATCH_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB01_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 180
+    model_info:
+      id: batch-gpt-sub01-5.4-mini
+      base_model: gpt-5.4-mini
+      workload_type: scheduled-batch
+  - model_name: batch-gpt-5.4-nano-grp1
     litellm_params:
       model: azure/gpt-5.4-nano
-      api_base: os.environ/AZURE_BATCH_FOUNDRY_01_ENDPOINT
-      api_key: os.environ/AZURE_BATCH_FOUNDRY_01_KEY
-      api_version: "2026-02-01-preview"
-      tpm: 5000000
-      rpm: 6000
-      max_parallel_requests: 120
-      order: 1
+      api_base: os.environ/AZURE_BATCH_GPT_SUB01_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB01_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 200
     model_info:
-      id: azure-batch-foundry-01-gpt-nano
-      provider: azure-openai
-      base_model: azure/gpt-5.4-nano
+      id: batch-gpt-sub01-5.4-nano
+      base_model: gpt-5.4-nano
       workload_type: scheduled-batch
-      full_content_logging: true
 
-  - model_name: batch-gemini-flash
+  # Batch Group 2: gpt-sub7
+  - model_name: batch-gpt-5.5-grp2
     litellm_params:
-      model: vertex_ai/gemini-2.5-flash
-      vertex_project: os.environ/VERTEX_BATCH_PROJECT_ID
-      vertex_location: os.environ/VERTEX_BATCH_LOCATION
-      vertex_credentials: os.environ/VERTEX_BATCH_CREDENTIALS_JSON
-      tpm: 5000000
+      model: azure/gpt-5.5
+      api_base: os.environ/AZURE_BATCH_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB02_KEY
+      api_version: "2026-04-24"
+      tpm: 9000000
       rpm: 6000
       max_parallel_requests: 120
-      order: 2
     model_info:
-      id: vertex-batch-gemini-flash
-      provider: vertex-ai
-      base_model: gemini-2.5-flash
+      id: batch-gpt-sub02-5.5
+      base_model: gpt-5.5
       workload_type: scheduled-batch
-      full_content_logging: true
+  - model_name: batch-gpt-5.4-grp2
+    litellm_params:
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_BATCH_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB02_KEY
+      api_version: "2026-03-05"
+      tpm: 9000000
+      rpm: 6000
+      max_parallel_requests: 120
+    model_info:
+      id: batch-gpt-sub02-5.4
+      base_model: gpt-5.4
+      workload_type: scheduled-batch
+  - model_name: batch-gpt-5.4-mini-grp2
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: os.environ/AZURE_BATCH_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB02_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 8000
+      max_parallel_requests: 180
+    model_info:
+      id: batch-gpt-sub02-5.4-mini
+      base_model: gpt-5.4-mini
+      workload_type: scheduled-batch
+  - model_name: batch-gpt-5.4-nano-grp2
+    litellm_params:
+      model: azure/gpt-5.4-nano
+      api_base: os.environ/AZURE_BATCH_GPT_SUB02_ENDPOINT
+      api_key: os.environ/AZURE_BATCH_GPT_SUB02_KEY
+      api_version: "2026-03-17"
+      tpm: 9000000
+      rpm: 10000
+      max_parallel_requests: 200
+    model_info:
+      id: batch-gpt-sub02-5.4-nano
+      base_model: gpt-5.4-nano
+      workload_type: scheduled-batch
 
 litellm_settings:
   drop_params: true
@@ -843,59 +797,58 @@ litellm_settings:
   num_retries: 3
   success_callback: ["langfuse", "otel", "azure_sentinel"]
   failure_callback: ["langfuse", "otel", "azure_sentinel", "sentry"]
-  callbacks: ["langfuse", "otel"]
   turn_off_message_logging: false
   redact_user_api_key_info: true
   global_disable_no_log_param: true
   store_prompts_in_spend_logs: true
-  # Fallbacks: Foundry Claude → Vertex Claude (same model type) → GPT (cross-model).
-  # Prioritizing same-model-type fallback keeps output consistency; GPT is last resort.
-  # Never cross-group for the same model — prevents policy-violation traffic spreading.
+  # Fallback priority per section 6.2:
+  #   Foundry Claude → Vertex Claude (same model type) → GPT (cross-model)
+  #   Never cross-group for same model — prevents policy-violation traffic spreading.
   fallbacks:
-    - claude-opus-1: ["vertex-claude-opus", "claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
-    - claude-opus-2: ["vertex-claude-opus", "claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
-    - claude-opus-3: ["vertex-claude-opus", "claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
-    - claude-opus-4: ["vertex-claude-opus", "claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
-    - claude-opus-5: ["vertex-claude-opus", "claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
-    - claude-sonnet-1: ["vertex-claude-sonnet", "gpt-frontier-1"]
-    - claude-sonnet-2: ["vertex-claude-sonnet", "gpt-frontier-2"]
-    - claude-sonnet-3: ["vertex-claude-sonnet", "gpt-frontier-3"]
-    - claude-sonnet-4: ["vertex-claude-sonnet", "gpt-frontier-4"]
-    - claude-sonnet-5: ["vertex-claude-sonnet", "gpt-frontier-5"]
-    - claude-haiku-1: ["vertex-claude-haiku", "claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
-    - claude-haiku-2: ["vertex-claude-haiku", "claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
-    - claude-haiku-3: ["vertex-claude-haiku", "claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
-    - claude-haiku-4: ["vertex-claude-haiku", "claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
-    - claude-haiku-5: ["vertex-claude-haiku", "claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
-    - gpt-frontier-1: ["gpt-fast-1", "claude-sonnet-1", "vertex-claude-sonnet"]
-    - gpt-frontier-2: ["gpt-fast-2", "claude-sonnet-2", "vertex-claude-sonnet"]
-    - gpt-frontier-3: ["gpt-fast-3", "claude-sonnet-3", "vertex-claude-sonnet"]
-    - gpt-frontier-4: ["gpt-fast-4", "claude-sonnet-4", "vertex-claude-sonnet"]
-    - gpt-frontier-5: ["gpt-fast-5", "claude-sonnet-5", "vertex-claude-sonnet"]
-    - batch-claude-haiku: ["batch-gpt-nano", "batch-gemini-flash"]
-    - batch-gpt-nano: ["batch-gemini-flash"]
-  context_window_fallbacks:
-    - claude-haiku-1: ["claude-sonnet-1", "vertex-claude-sonnet", "gpt-frontier-1"]
-    - claude-haiku-2: ["claude-sonnet-2", "vertex-claude-sonnet", "gpt-frontier-2"]
-    - claude-haiku-3: ["claude-sonnet-3", "vertex-claude-sonnet", "gpt-frontier-3"]
-    - claude-haiku-4: ["claude-sonnet-4", "vertex-claude-sonnet", "gpt-frontier-4"]
-    - claude-haiku-5: ["claude-sonnet-5", "vertex-claude-sonnet", "gpt-frontier-5"]
-    - claude-sonnet-1: ["claude-opus-1", "vertex-claude-opus", "gpt-frontier-1"]
-    - claude-sonnet-2: ["claude-opus-2", "vertex-claude-opus", "gpt-frontier-2"]
-    - claude-sonnet-3: ["claude-opus-3", "vertex-claude-opus", "gpt-frontier-3"]
-    - claude-sonnet-4: ["claude-opus-4", "vertex-claude-opus", "gpt-frontier-4"]
-    - claude-sonnet-5: ["claude-opus-5", "vertex-claude-opus", "gpt-frontier-5"]
+    - claude-opus-4-7-grp1: ["vertex-claude-opus", "claude-sonnet-4-6-grp1", "vertex-claude-sonnet", "gpt-5.5-grp1"]
+    - claude-opus-4-7-grp2: ["vertex-claude-opus", "claude-sonnet-4-6-grp2", "vertex-claude-sonnet", "gpt-5.5-grp2"]
+    - claude-opus-4-7-grp3: ["vertex-claude-opus", "claude-sonnet-4-6-grp3", "vertex-claude-sonnet", "gpt-5.5-grp3"]
+    - claude-opus-4-7-grp4: ["vertex-claude-opus", "claude-sonnet-4-6-grp4", "vertex-claude-sonnet", "gpt-5.5-grp4"]
+    - claude-opus-4-7-grp5: ["vertex-claude-opus", "claude-sonnet-4-6-grp5", "vertex-claude-sonnet", "gpt-5.5-grp5"]
+    - claude-sonnet-4-6-grp1: ["vertex-claude-sonnet", "gpt-5.5-grp1"]
+    - claude-sonnet-4-6-grp2: ["vertex-claude-sonnet", "gpt-5.5-grp2"]
+    - claude-sonnet-4-6-grp3: ["vertex-claude-sonnet", "gpt-5.5-grp3"]
+    - claude-sonnet-4-6-grp4: ["vertex-claude-sonnet", "gpt-5.5-grp4"]
+    - claude-sonnet-4-6-grp5: ["vertex-claude-sonnet", "gpt-5.5-grp5"]
+    - claude-haiku-4-5-grp1: ["vertex-claude-haiku", "claude-sonnet-4-6-grp1", "vertex-claude-sonnet", "gpt-5.4-mini-grp1"]
+    - claude-haiku-4-5-grp2: ["vertex-claude-haiku", "claude-sonnet-4-6-grp2", "vertex-claude-sonnet", "gpt-5.4-mini-grp2"]
+    - claude-haiku-4-5-grp3: ["vertex-claude-haiku", "claude-sonnet-4-6-grp3", "vertex-claude-sonnet", "gpt-5.4-mini-grp3"]
+    - claude-haiku-4-5-grp4: ["vertex-claude-haiku", "claude-sonnet-4-6-grp4", "vertex-claude-sonnet", "gpt-5.4-mini-grp4"]
+    - claude-haiku-4-5-grp5: ["vertex-claude-haiku", "claude-sonnet-4-6-grp5", "vertex-claude-sonnet", "gpt-5.4-mini-grp5"]
+    - gpt-5.5-grp1: ["gpt-5.4-grp1", "claude-sonnet-4-6-grp1", "vertex-claude-sonnet"]
+    - gpt-5.5-grp2: ["gpt-5.4-grp2", "claude-sonnet-4-6-grp2", "vertex-claude-sonnet"]
+    - gpt-5.5-grp3: ["gpt-5.4-grp3", "claude-sonnet-4-6-grp3", "vertex-claude-sonnet"]
+    - gpt-5.5-grp4: ["gpt-5.4-grp4", "claude-sonnet-4-6-grp4", "vertex-claude-sonnet"]
+    - gpt-5.5-grp5: ["gpt-5.4-grp5", "claude-sonnet-4-6-grp5", "vertex-claude-sonnet"]
+    - batch-gpt-5.5-grp1: ["batch-gpt-5.4-grp1", "batch-gpt-5.4-mini-grp1"]
+    - batch-gpt-5.5-grp2: ["batch-gpt-5.4-grp2", "batch-gpt-5.4-mini-grp2"]
   content_policy_fallbacks:
-    - claude-sonnet-1: ["vertex-claude-sonnet", "gpt-frontier-1"]
-    - claude-sonnet-2: ["vertex-claude-sonnet", "gpt-frontier-2"]
-    - claude-sonnet-3: ["vertex-claude-sonnet", "gpt-frontier-3"]
-    - claude-sonnet-4: ["vertex-claude-sonnet", "gpt-frontier-4"]
-    - claude-sonnet-5: ["vertex-claude-sonnet", "gpt-frontier-5"]
-    - claude-opus-1: ["vertex-claude-opus", "gpt-frontier-1"]
-    - claude-opus-2: ["vertex-claude-opus", "gpt-frontier-2"]
-    - claude-opus-3: ["vertex-claude-opus", "gpt-frontier-3"]
-    - claude-opus-4: ["vertex-claude-opus", "gpt-frontier-4"]
-    - claude-opus-5: ["vertex-claude-opus", "gpt-frontier-5"]
+    - claude-sonnet-4-6-grp1: ["vertex-claude-sonnet", "gpt-5.5-grp1"]
+    - claude-sonnet-4-6-grp2: ["vertex-claude-sonnet", "gpt-5.5-grp2"]
+    - claude-sonnet-4-6-grp3: ["vertex-claude-sonnet", "gpt-5.5-grp3"]
+    - claude-sonnet-4-6-grp4: ["vertex-claude-sonnet", "gpt-5.5-grp4"]
+    - claude-sonnet-4-6-grp5: ["vertex-claude-sonnet", "gpt-5.5-grp5"]
+    - claude-opus-4-7-grp1: ["vertex-claude-opus", "gpt-5.5-grp1"]
+    - claude-opus-4-7-grp2: ["vertex-claude-opus", "gpt-5.5-grp2"]
+    - claude-opus-4-7-grp3: ["vertex-claude-opus", "gpt-5.5-grp3"]
+    - claude-opus-4-7-grp4: ["vertex-claude-opus", "gpt-5.5-grp4"]
+    - claude-opus-4-7-grp5: ["vertex-claude-opus", "gpt-5.5-grp5"]
+  context_window_fallbacks:
+    - claude-haiku-4-5-grp1: ["claude-sonnet-4-6-grp1", "vertex-claude-sonnet", "gpt-5.5-grp1"]
+    - claude-haiku-4-5-grp2: ["claude-sonnet-4-6-grp2", "vertex-claude-sonnet", "gpt-5.5-grp2"]
+    - claude-haiku-4-5-grp3: ["claude-sonnet-4-6-grp3", "vertex-claude-sonnet", "gpt-5.5-grp3"]
+    - claude-haiku-4-5-grp4: ["claude-sonnet-4-6-grp4", "vertex-claude-sonnet", "gpt-5.5-grp4"]
+    - claude-haiku-4-5-grp5: ["claude-sonnet-4-6-grp5", "vertex-claude-sonnet", "gpt-5.5-grp5"]
+    - claude-sonnet-4-6-grp1: ["claude-opus-4-7-grp1", "vertex-claude-opus", "gpt-5.5-grp1"]
+    - claude-sonnet-4-6-grp2: ["claude-opus-4-7-grp2", "vertex-claude-opus", "gpt-5.5-grp2"]
+    - claude-sonnet-4-6-grp3: ["claude-opus-4-7-grp3", "vertex-claude-opus", "gpt-5.5-grp3"]
+    - claude-sonnet-4-6-grp4: ["claude-opus-4-7-grp4", "vertex-claude-opus", "gpt-5.5-grp4"]
+    - claude-sonnet-4-6-grp5: ["claude-opus-4-7-grp5", "vertex-claude-opus", "gpt-5.5-grp5"]
 
 router_settings:
   routing_strategy: simple-shuffle
@@ -935,70 +888,121 @@ environment_variables:
   SLACK_WEBHOOK_URL: os.environ/SLACK_WEBHOOK_URL
 
 # Team settings: each team is assigned to one isolation group.
-# Users in group N can only access model_name *-N variants.
+# Users in group N can only access model_name *-grpN variants.
 team_settings:
   - team_id: engineering-group-1
     team_alias: Engineering Group 1
     max_budget: 10000
     budget_duration: 30d
-    models: ["claude-opus-1", "claude-sonnet-1", "claude-haiku-1", "gpt-frontier-1"]
+    models:
+      - claude-opus-4-7-grp1
+      - claude-sonnet-4-6-grp1
+      - claude-haiku-4-5-grp1
+      - gpt-5.5-grp1
+      - gpt-5.4-grp1
+      - gpt-5.4-mini-grp1
+      - gpt-5.4-nano-grp1
+      - DeepSeek-V4-Pro-grp1
+      - DeepSeek-V4-Flash-grp1
     tpm_limit: 4000000
     rpm_limit: 4000
   - team_id: engineering-group-2
     team_alias: Engineering Group 2
     max_budget: 10000
     budget_duration: 30d
-    models: ["claude-opus-2", "claude-sonnet-2", "claude-haiku-2", "gpt-frontier-2"]
+    models:
+      - claude-opus-4-7-grp2
+      - claude-sonnet-4-6-grp2
+      - claude-haiku-4-5-grp2
+      - gpt-5.5-grp2
+      - gpt-5.4-grp2
+      - gpt-5.4-mini-grp2
+      - gpt-5.4-nano-grp2
+      - DeepSeek-V4-Pro-grp1
+      - DeepSeek-V4-Flash-grp1
     tpm_limit: 4000000
     rpm_limit: 4000
   - team_id: engineering-group-3
     team_alias: Engineering Group 3
     max_budget: 10000
     budget_duration: 30d
-    models: ["claude-opus-3", "claude-sonnet-3", "claude-haiku-3", "gpt-frontier-3"]
+    models:
+      - claude-opus-4-7-grp3
+      - claude-sonnet-4-6-grp3
+      - claude-haiku-4-5-grp3
+      - gpt-5.5-grp3
+      - gpt-5.4-grp3
+      - gpt-5.4-mini-grp3
+      - gpt-5.4-nano-grp3
+      - DeepSeek-V4-Pro-grp1
+      - DeepSeek-V4-Flash-grp1
     tpm_limit: 4000000
     rpm_limit: 4000
   - team_id: engineering-group-4
     team_alias: Engineering Group 4
     max_budget: 10000
     budget_duration: 30d
-    models: ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4", "gpt-frontier-4"]
+    models:
+      - claude-opus-4-7-grp4
+      - claude-sonnet-4-6-grp4
+      - claude-haiku-4-5-grp4
+      - gpt-5.5-grp4
+      - gpt-5.4-grp4
+      - gpt-5.4-mini-grp4
+      - gpt-5.4-nano-grp4
+      - DeepSeek-V4-Pro-grp1
+      - DeepSeek-V4-Flash-grp1
     tpm_limit: 4000000
     rpm_limit: 4000
   - team_id: engineering-group-5
     team_alias: Engineering Group 5
     max_budget: 10000
     budget_duration: 30d
-    models: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "gpt-frontier-5"]
+    models:
+      - claude-opus-4-7-grp5
+      - claude-sonnet-4-6-grp5
+      - claude-haiku-4-5-grp5
+      - gpt-5.5-grp5
+      - gpt-5.4-grp5
+      - gpt-5.4-mini-grp5
+      - gpt-5.4-nano-grp5
+      - DeepSeek-V4-Pro-grp1
+      - DeepSeek-V4-Flash-grp1
     tpm_limit: 4000000
     rpm_limit: 4000
   - team_id: scheduled-jobs
     team_alias: Scheduled Jobs
     max_budget: 5000
     budget_duration: 30d
-    models: ["batch-claude-haiku", "batch-gpt-nano", "batch-gemini-flash"]
+    models:
+      - batch-gpt-5.5-grp1
+      - batch-gpt-5.5-grp2
+      - batch-gpt-5.4-grp1
+      - batch-gpt-5.4-grp2
+      - batch-gpt-5.4-mini-grp1
+      - batch-gpt-5.4-mini-grp2
+      - batch-gpt-5.4-nano-grp1
+      - batch-gpt-5.4-nano-grp2
     tpm_limit: 6000000
     rpm_limit: 6000
 
 guardrails:
-  full_request_response_logging:
-    required_approvals: ["security", "legal", "data_protection_officer"]
-    storage_controls:
-      encryption_at_rest: required
-      encryption_in_transit: required
-      rbac: required
-      access_review_days: 30
-      retention_days: 90
-      break_glass_approval: required
   batch_workload_isolation:
-    dedicated_models: ["batch-claude-haiku", "batch-gpt-nano", "batch-gemini-flash"]
+    dedicated_models:
+      - batch-gpt-5.5-grp1
+      - batch-gpt-5.5-grp2
+      - batch-gpt-5.4-grp1
+      - batch-gpt-5.4-grp2
+      - batch-gpt-5.4-mini-grp1
+      - batch-gpt-5.4-mini-grp2
+      - batch-gpt-5.4-nano-grp1
+      - batch-gpt-5.4-nano-grp2
     deny_fallback_to_interactive_models: true
-    preferred_models: ["batch-gpt-nano", "batch-gemini-flash", "batch-claude-haiku"]
     repeated_prompt_review: required
   model_name_isolation:
     groups: 5
-    endpoints_per_group: 2
-    total_endpoints: 10
+    endpoints_per_group_claude: 2
+    endpoints_per_group_gpt: 1
     fallback_policy: "cross-model-same-group"
     deny_cross_group_fallback_for_same_model: true
   log_archival:

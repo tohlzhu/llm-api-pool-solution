@@ -4,7 +4,11 @@
 
 ## 方案文件
 
-1. `llm-api-pool-solution.md`：主解决方案文档，Markdown 格式，中文。
-2. `scripts/create-foundry-pool.sh`：Azure CLI/Linux 参考自动化脚本。
-3. `config/litellm-config.example.yaml`：LiteLLM 示例配置。
-4. `.vscode/mcp.example.json`：VS Code / GitHub Copilot 本地 MCP 示例配置。
+1. `llm-api-pool-solution.md`：主解决方案文档（LiteLLM + Azure Foundry 模型 API 池），Markdown 格式，中文。
+2. `github-copilot-solution.md`：GitHub Copilot Vibe Coding 方案文档（Harness + 模型 API 完整方案）。
+3. `scripts/create-subscriptions.sh`：第一阶段脚本，创建 Azure 订阅并输出参数 CSV。
+4. `scripts/deploy-models.sh`：第二阶段脚本，基于 CSV 部署 Foundry 资源和模型端点。
+5. `scripts/delete-resources.sh`：清理脚本，删除资源组并清除软删除状态。
+6. `scripts/test-endpoints.sh`：端点连通性验证脚本。
+7. `config/litellm-config.example.yaml`：LiteLLM 示例配置。
+8. `.vscode/mcp.example.json`：VS Code / GitHub Copilot 本地 MCP 示例配置。

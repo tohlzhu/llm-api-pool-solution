@@ -4,7 +4,7 @@
 
 本方案为中国客户设计一套面向 Claude/GPT 等海外闭源模型的多渠道 API 供应池。目标是在企业合规、采购可控、日志可审计、容量可扩展的前提下，为约 1000 名员工提供稳定的模型访问能力。
 
-方案采用五层供应与保障模型：Microsoft Foundry / Azure AI Foundry 作为主供应渠道；10 个 Azure subscription 下的多 Foundry、多端点 Claude 池作为第一备用能力；Microsoft Foundry GPT 池作为第二供应渠道和用户可选模型；Partner 提供的 Google Vertex AI / Gemini Enterprise Agent Platform Claude API 作为第三供应渠道；GitHub Copilot 作为员工 IDE/CLI 人机交互式开发工作兜底方式。LiteLLM 作为统一 API 网关，承担流量调度、主动限流、失败重试、冷却、降级、日志审计和成本治理。对高重复、低交互的定时任务，应建立独立账号池和 LiteLLM 模型组，避免与员工交互式工作负载共享同一组 Claude/GPT 端点。
+方案采用五层供应与保障模型：Microsoft Foundry / Azure AI Foundry 作为主供应渠道；10 个 Azure subscription 下的多 Foundry、多端点 Claude 池作为第一备用能力；Microsoft Foundry GPT 池作为第二供应渠道和用户可选模型；Partner 提供的 Google Vertex AI / Gemini Enterprise Agent Platform Claude API 作为第三供应渠道；GitHub Copilot 作为员工 IDE/CLI 人机交互式开发工作兜底方式。LiteLLM 作为统一 API 网关，承担流量调度、主动限流、失败重试、冷却、降级、日志审计和成本治理。对高重复、低交互的定时任务，建立独立账号池和 LiteLLM 模型组，避免与员工交互式工作负载共享同一组 Claude/GPT 端点。
 
 ## 2. 设计目标与边界
 
@@ -20,28 +20,38 @@
 
 ### 2.2 非目标
 
-1. 不将 GitHub Copilot 设计为 LiteLLM 后端或服务端无人值守 API 池。
-2. 不在脚本或配置中写入真实租户 ID、订阅 ID、token、密钥或客户敏感信息。
-3. 不替代客户的法律、合规、数据跨境、安全评审流程。
-4. 不通过账号池、代理或路由策略绕过模型提供方、Marketplace、GitHub Copilot 或企业安全策略；所有隔离设计只用于容量治理、可用性保护和审计留存。
-5. 不承诺所有模型、区域、Marketplace SKU 在所有 Azure 订阅类型中均可直接购买或部署；实际可用性以客户租户、计费区域、Marketplace 条款和模型提供方策略为准。
+1. 不在脚本或配置中写入真实租户 ID、订阅 ID、token、密钥或客户敏感信息。
+2. 不替代客户的法律、合规、数据跨境、安全评审流程。
+3. 不通过账号池、代理或路由策略绕过模型提供方、Marketplace、GitHub Copilot 或企业安全策略；所有隔离设计只用于容量治理、可用性保护和审计留存。
+4. 不承诺所有模型、区域、Marketplace SKU 在所有 Azure 订阅类型中均可直接购买或部署；实际可用性以客户租户、计费区域、Marketplace 条款和模型提供方策略为准。
 
-## 3. 关键假设与容量模型
+## 3. 关键假设与容量模型（举例）
 
 1. 客户具备 EA/MCA 下自动创建 Azure subscription 的计费权限和服务主体授权。
-2. 客户计划创建 10 个新 subscription，每个 subscription 下部署一组 Foundry 资源/项目与模型端点。
+2. 客户计划创建 3 类 Azure 订阅，其中 A 类 10 个（用于 Claude Code 终端），B 类 7 个（5 个用于 codex 终端，2 个用于定时任务），C 类 1 个(用于通用场景)。A/B/C 类的描述如下： 
+  - A. Claude 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "claude-opus-4-7", model_name = "claude-sonnet-4-6", model_name = "claude-haiku-4-5" 的端点各 1 个，区域统一选择为 eastus2；
+  - B. GPT 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "gpt-5.5", model_name = "gpt-5.4", model_name = "gpt-5.4-mini", model_name = "gpt-5.4-nano" 的端点各 1 个，区域统一选择为 eastus2；
+  - C. DeepSeek 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "DeepSeek-V4-Pro", model_name = "DeepSeek-V4-Flash" 的端点各 1 个，区域统一选择为 eastus2；
 3. Claude 模型在 Microsoft Foundry 中通过 Anthropic partner model / Marketplace 路径供应；GPT 模型通过 Azure OpenAI in Microsoft Foundry / Foundry Models sold directly by Azure 路径供应。
 4. 客户接受完整请求/响应日志记录，并将配套实施加密、最小权限、留存、审批、脱敏和访问审计控制。
-5. 客户愿意为定时任务额外预留若干 subscription，例如 5 个，作为低成本模型优先、权限独立、日志独立的批处理供应池。
 
-| 模型族 | 单订阅 TPM | 10 订阅汇总 TPM | 主要用途 |
+| 模型族 | 单订阅 TPM | 订阅汇总 TPM | 主要用途 |
 | --- | ---: | ---: | --- |
 | Claude Opus | 2,000,000 | 20,000,000 | 高复杂度编码、架构设计、长任务代理 |
 | Claude Sonnet | 4,000,000 | 40,000,000 | 主力编码、日常开发、文档与分析 |
 | Claude Haiku | 4,000,000 | 40,000,000 | 低延迟、高频轻量任务 |
-| GPT 5.4 / 5.5 | 10,000,000 | 100,000,000 | 通用问答、推理、工具调用、多模态和 Claude 备用 |
+| GPT 5.5 | 10,000,000 | 70,000,000 | 通用问答、推理、工具调用、多模态和 Claude 备用 |
+| GPT 5.4 mini | 10,000,000 | 70,000,000 | 低延迟、高频推理和代码辅助 |
+| GPT 5.4 nano | 10,000,000 | 70,000,000 | 低延迟、高频推理 |
+| DeepSeek V4 Pro | 10,000,000 | 10,000,000 | 高质量推理、数学、代码和中文任务 |
+| DeepSeek V4 Flash | 10,000,000 | 10,000,000 | 低延迟、高频推理和代码辅助 |
 
-定时任务池不应从上述 10 个交互式 subscription 中切走容量。建议额外规划 5 个 subscription，优先部署 `gpt-nano`、`gemini-flash`、`claude-haiku` 等低成本模型，并在 LiteLLM 中暴露为 `batch-*` 模型组。最终 subscription 数量、TPM/RPM 和模型 ID 需以客户租户实际配额、区域可用性和供应商条款验证结果为准。
+在 litellm 层面，（假设有 5 个开发 team）
+
+1. 将 10 个 A 类订阅/端点分配给 5 组 model_name (claude-opus-4-7-grp{1..5}, claude-sonnet-4-6-grp{1..5}, claude-haiku-4-5-grp{1..5})，分别交付给 5 个开发 team 使用，这样 1 个 team 的异常行为只会 block 掉自己所用的 model_name 后的大模型端点，避免事故扩散；
+2. 将 5 个 B 类订阅/端点（由于 B 类端点容量较大，达到 10M tpm）分配给 5 组 model_name (gpt-5.5-grp{1..5}, gpt-5.4-grp{1..5}, gpt-5.4-mini-grp{1..5}, gpt-5.4-nano-grp{1..5})，分别交付给 5 个开发 team 使用；
+3. 将 2 个 B 类订阅/端点分配给 2 组 model_name (batch-gpt-5.5-grp{1..2}, batch-gpt-5.4-grp{1..2}, batch-gpt-5.4-mini-grp{1..2}, batch-gpt-5.4-nano-grp{1..2})，供开发 team 在定时任务类负载中使用；
+4. 将 1 个 C 类订阅/端点分配给 1 组 model_name (DeepSeek-V4-Pro-grp1, DeepSeek-V4-Flash-grp1)，供开发 team 公用；
 
 面向 1000 名员工时，建议将总容量按用户分组、团队预算、业务优先级和模型成本做二次切分。LiteLLM 中的 virtual key、team budget、per-model TPM/RPM、max parallel requests 和审计日志，是把总容量变成可运营服务的关键控制面。
 
@@ -53,14 +63,14 @@
 
 关键实施点：
 
-1. 每个 subscription 独立承载 Claude Opus、Sonnet、Haiku 与 GPT 5.4 / 5.5 端点。
+1. 每个 subscription 独立承载 Claude Opus、Sonnet、Haiku 或 GPT 端点。
 2. 每个端点在 LiteLLM 中作为独立 deployment 注册，设置明确的 `tpm`、`rpm`、`max_parallel_requests` 和健康状态。
 3. 使用 Azure Key Vault 保存端点密钥，避免在 LiteLLM 配置中直接写入 secret。
 4. 对 Foundry 资源、模型端点、Key Vault、AKS、Redis、PostgreSQL、日志存储配置统一标签，便于成本、审计和责任归属。
 
 ### 4.2 第二层：多订阅 Claude 池化能力
 
-10 个 subscription 的核心价值不是简单扩大账面配额，而是把容量拆成多个健康单元。LiteLLM 在同一个用户可见模型名下注册多个 Foundry Claude deployment，并根据 TPM/RPM 权重、当前使用量、失败状态和冷却状态进行选择。
+多个 subscription 的核心价值不是简单扩大账面配额，而是把容量拆成多个健康单元。LiteLLM 在同一个用户可见模型名下注册多个 Foundry Claude deployment，并根据 TPM/RPM 权重、当前使用量、失败状态和冷却状态进行选择。
 
 推荐策略：
 
@@ -85,26 +95,26 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 
 ```
 订阅分组:
-  Group 1: subscription-01, subscription-02  →  model_name: claude-sonnet-1
-  Group 2: subscription-03, subscription-04  →  model_name: claude-sonnet-2
-  Group 3: subscription-05, subscription-06  →  model_name: claude-sonnet-3
-  Group 4: subscription-07, subscription-08  →  model_name: claude-sonnet-4
-  Group 5: subscription-09, subscription-10  →  model_name: claude-sonnet-5
+  Group 1: llmpool-sub01, llmpool-sub02  →  model_name: claude-sonnet-4-6-grp1
+  Group 2: llmpool-sub03, llmpool-sub04  →  model_name: claude-sonnet-4-6-grp2
+  Group 3: llmpool-sub05, llmpool-sub06  →  model_name: claude-sonnet-4-6-grp3
+  Group 4: llmpool-sub07, llmpool-sub08  →  model_name: claude-sonnet-4-6-grp4
+  Group 5: llmpool-sub09, llmpool-sub10  →  model_name: claude-sonnet-4-6-grp5
 ```
 
-同理适用于 `claude-opus-{1..5}`、`claude-haiku-{1..5}`、`gpt-frontier-{1..5}` 等所有主交互模型。
+同理适用于所有模型。
 
 #### 用户分配策略
 
 1. 将 1000 名员工按团队、部门或随机分桶分配到 5 个组之一。
-2. 每个团队/用户的 virtual key 绑定对应组的 `model_name`（例如 team-A 使用 `claude-sonnet-1`，team-B 使用 `claude-sonnet-2`）。
+2. 每个团队/用户的 virtual key 绑定对应组的 `model_name`（例如 team-A 使用 `claude-sonnet-4-6-grp1`，team-B 使用 `claude-sonnet-4-6-grp2`）。
 3. 分配关系通过 LiteLLM 的 `team_settings` 中的 `models` 字段或 key-level `model_access` 控制。
 4. 用户无需关心底层分组，应用侧可通过配置或 header 路由到正确的 model_name。
 
 #### 容灾与降级
 
 1. 组内 2 个端点之间按常规 LiteLLM 路由做负载均衡和 failover。
-2. 当某组全部端点被封禁时，该组用户通过 `fallbacks` 降级到其他模型（如 `gpt-frontier-{N}`），而不是自动切换到其他 Claude 组——避免"带病"流量扩散到健康组。
+2. 当某组全部端点被封禁时，该组用户通过 `fallbacks` 首先降级到其他供应商的相同模型（如 `vertex-claude-opus-4-7-grp{N}`），次之降级到跨类型的模型（如 `gpt-5.5-grp{N}`），而不是自动切换到其他 Claude 组——避免"带病"流量扩散到健康组。
 3. 管理员在确认问题源头并处置违规用户后，可手动将受影响组的用户临时迁移到其他组。
 
 #### 隔离效果
@@ -130,8 +140,8 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 
 在 LiteLLM 中建议设置两类模型别名：
 
-1. `claude-sonnet`、`claude-opus`、`claude-haiku`：默认进入 Claude 池。
-2. `gpt-frontier`、`gpt-fast`：默认进入 GPT 池。
+1. `claude-opus-*`、`claude-sonnet-*`、`claude-haiku-*`：默认进入 Claude 池。
+2. `gpt-*`：默认进入 GPT 池。
 
 同时为 Claude 模型配置多级 fallback：Foundry Claude 端点不可用时，首先降级至 GCP Vertex AI Claude 端点（同模型类型，保证输出风格和能力一致性），仅当所有 Claude 供应渠道均不可用时，才降级至 GPT。该优先级确保 Claude 工作负载在 fallback 后行为一致、不因模型类型切换导致工作异常。对需要严格模型一致性的业务，要求应用显式声明 fallback 策略或禁用跨模型降级。
 
@@ -141,11 +151,11 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 
 LiteLLM 中应将 Vertex Claude 放在 Foundry Claude 的**首选 fallback**位置（优先于 GPT），确保降级后模型类型一致、输出风格和能力不变。日常流量仍优先走 Foundry，只有 Foundry Claude 端点不可用时才切换到 Vertex Claude；所有 Claude 渠道均不可用时，再降级至 GPT。该设计保证 Claude 为主的工作负载在 fallback 后不会因模型切换而出现格式、能力或行为异常。跨云账单、支持路径、SLA、区域可用性和数据处理条款应单独登记。
 
-### 4.5 第五层：GitHub Copilot 开发工作兜底
+### 4.5 第五层：GitHub Copilot Vibe Coding 方案
 
-GitHub Copilot 可在 VS Code、JetBrains、GitHub CLI、Copilot CLI 等人机交互式开发场景中提供 Claude 和 GPT 模型能力。该能力应定位为员工开发生产力兜底方式：当 API 型渠道因采购、区域、配额或模型可用性出现影响时，员工仍可在 IDE/CLI 中继续完成代码理解、生成、重构和调试任务。
+GitHub Copilot 是面向中国区客户的 **Vibe Coding 首选推荐方案**，不仅是模型 API，而是 Harness + 模型 API 的完整 Vibe Coding 解决方案。它将 AI 模型能力、Agent Mode、Coding Agent、代码审查和企业治理集成在一个平台中，是开发者获得 AI 编码能力的最快路径。
 
-Copilot 不进入 LiteLLM API 池，不作为服务端自动化模型后端使用。
+Copilot 不进入 LiteLLM API 池（多人共享 1 个账号会导致封号），但可封装为 1 对 1 的账号池作为单个员工场景的模型后端使用。完整方案描述、部署步骤、审计留存、MCP 集成和合规注意事项详见 **[GitHub Copilot 完整方案文档](github-copilot-solution.md)**。
 
 ### 4.6 横向隔离：定时任务专用账号池
 
@@ -153,10 +163,9 @@ Claude/GPT 服务端通常具备安全扫描、异常使用检测和滥用防护
 
 建议建立独立的定时任务账号池：
 
-1. 额外创建若干 subscription，例如 5 个，专门承载定时任务、批处理、报表生成、周期性代码扫描等非交互式工作负载。
-2. 在这些 subscription 中部署 Claude Haiku、GPT nano、Gemini Flash 或同级别轻量模型；只有确有质量要求的任务才升级到 Sonnet、Opus 或 frontier GPT。
-3. 在 LiteLLM 中将定时任务池隔离为 `batch-claude-haiku`、`batch-gpt-nano`、`batch-gemini-flash` 等模型组，使用独立 virtual key、team budget、TPM/RPM、fallback 和日志策略。
-4. 员工和内部系统发起定时任务时，必须显式选择 `batch-*` 模型组；默认交互模型组不接受批处理 token 或长期无人值守任务。
+1. 额外创建若干 subscription，例如 2 个，专门承载定时任务、批处理、报表生成、周期性代码扫描等非交互式工作负载。
+2. 在 LiteLLM 中将定时任务池隔离为 `batch-*` 模型组，使用独立 virtual key、team budget、TPM/RPM、fallback 和日志策略。
+3. 员工和内部系统发起定时任务时，必须显式选择 `batch-*` 模型组；默认交互模型组不接受批处理 token 或长期无人值守任务。
 5. 对重复 prompt 做模板版本号、业务系统 ID、任务 ID 和审批人记录，便于解释流量来源、定位异常和向供应商支持团队提交合规说明。
 6. 对命中安全策略、429、5xx 或异常冷却的任务设置自动暂停和人工复核，不允许无限重试或多池轮转放大异常请求。
 
@@ -173,26 +182,26 @@ Developer Apps / Internal Tools / Agents
         - full request-response logging
         - cost and quota governance
                  |
-  +--------------+-------------------+-------------------+
-  |                                  |                   |
-  v                                  v                   v
-Azure Foundry Claude Pool      Azure Foundry GPT Pool    Vertex Claude via Partner
-10 subscriptions               10 subscriptions          Separate cloud/provider path
-Opus/Sonnet/Haiku              GPT 5.4 / GPT 5.5         Claude Opus/Sonnet/Haiku
-  |                                  |
-  v                                  v
-model_name isolation:            model_name isolation:
-  claude-sonnet-1: sub-01,02       gpt-frontier-1: sub-01,02
-  claude-sonnet-2: sub-03,04       gpt-frontier-2: sub-03,04
-  claude-sonnet-3: sub-05,06       gpt-frontier-3: sub-05,06
-  claude-sonnet-4: sub-07,08       gpt-frontier-4: sub-07,08
-  claude-sonnet-5: sub-09,10       gpt-frontier-5: sub-09,10
+  +--------------+-----------------------------+-------------------+
+  |                                            |                   |
+  v                                            v                   v
+Azure Foundry Claude Pool                Azure Foundry GPT Pool    Vertex Claude via Partner
+10 subscriptions                         5 subscriptions           Separate cloud/provider path
+Opus/Sonnet/Haiku                        GPT 5.4 / GPT 5.5         Claude Opus/Sonnet/Haiku
+  |                                            |
+  v                                            v
+model_name isolation:                        model_name isolation:
+  claude-opus-4-7-grp1: llmpool-sub01,02       gpt-5.5-grp1: llmpool-sub11
+  claude-opus-4-7-grp2: llmpool-sub03,04       gpt-5.5-grp2: llmpool-sub12
+  claude-opus-4-7-grp3: llmpool-sub05,06       gpt-5.5-grp3: llmpool-sub13
+  claude-opus-4-7-grp4: llmpool-sub07,08       gpt-5.5-grp4: llmpool-sub14
+  claude-opus-4-7-grp5: llmpool-sub09,10       gpt-5.5-grp5: llmpool-sub15
 
 Scheduled / batch workload pool:
-Internal Jobs --> LiteLLM batch-* groups --> Dedicated Foundry / Vertex lightweight endpoints
-                                         5 extra subscriptions, isolated keys and logs
+Internal Jobs --> LiteLLM batch-* groups --> Dedicated Foundry endpoints
+                                         2 extra subscriptions, isolated keys and logs
 
-Developer fallback workflow:
+Developer workflow:
 Employees --> VS Code / GitHub Copilot / MCP --> GitHub, Vercel, HF, Gmail tools
 Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit store
 ```
@@ -209,17 +218,24 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 
 | LiteLLM 模型名 | 底层供应 | 说明 |
 | --- | --- | --- |
-| `claude-opus-{1..5}` | 每组 2 个 Foundry Claude Opus 端点 | 高复杂度任务，5 组隔离 |
-| `claude-sonnet-{1..5}` | 每组 2 个 Foundry Claude Sonnet 端点 | 默认 Claude 主力模型，5 组隔离 |
-| `claude-haiku-{1..5}` | 每组 2 个 Foundry Claude Haiku 端点 | 低延迟、高频轻量任务，5 组隔离 |
-| `gpt-frontier-{1..5}` | 每组 2 个 Foundry GPT 5.5 / 5.4 端点 | GPT 主力模型，5 组隔离 |
-| `gpt-fast-{1..5}` | 每组 2 个 Foundry GPT mini/nano 端点 | 快速低成本任务，5 组隔离 |
+| `claude-opus-4-7-grp{1..5}` | 每组 2 个 Foundry Claude Opus 端点 | 高复杂度任务，5 组隔离 |
+| `claude-sonnet-4-6-grp{1..5}` | 每组 2 个 Foundry Claude Sonnet 端点 | 默认 Claude 主力模型，5 组隔离 |
+| `claude-haiku-4-5-grp{1..5}` | 每组 2 个 Foundry Claude Haiku 端点 | 低延迟、高频轻量任务，5 组隔离 |
+| `gpt-5.5-grp{1..5}` | 每组 1 个 Foundry GPT 5.5 端点 | GPT 主力模型，5 组隔离 |
+| `gpt-5.4-grp{1..5}` | 每组 1 个 Foundry GPT 5.4 端点 | GPT 主力模型，5 组隔离 |
+| `gpt-5.4-mini-grp{1..5}` | 每组 1 个 Foundry GPT mini 端点 | 快速低成本任务，5 组隔离 |
+| `gpt-5.4-nano-grp{1..5}` | 每组 1 个 Foundry GPT nano 端点 | 快速低成本任务，5 组隔离 |
+| `DeepSeek-V4-Pro-grp1` | 每组 1 个 Foundry DeepSeek-V4-Pro 端点 | 高质量推理与代码 |
+| `DeepSeek-V4-Flash-grp1` | 每组 1 个 Foundry DeepSeek-V4-Flash 端点 | 低延迟推理 |
+| `vertex-claude-opus` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
 | `vertex-claude-sonnet` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
-| `batch-claude-haiku` | 定时任务专用 Foundry Claude Haiku 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
-| `batch-gpt-nano` | 定时任务专用 Foundry GPT nano 池 | 低成本、高频重复 prompt |
-| `batch-gemini-flash` | 定时任务专用 Vertex Gemini Flash 池 | 跨云轻量批处理备用 |
+| `vertex-claude-haiku` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
+| `batch-gpt-5.5-grp{1..2}` | 定时任务专用 Foundry GPT 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
+| `batch-gpt-5.4-grp{1..2}` | 定时任务专用 Foundry GPT 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
+| `batch-gpt-5.4-mini-grp{1..2}` | 定时任务专用 Foundry GPT mini 池 | 低成本、高频重复 prompt |
+| `batch-gpt-5.4-nano-grp{1..2}` | 定时任务专用 Foundry GPT nano 池 | 低成本、高频重复 prompt |
 
-用户分配到某一组号后，应用层使用对应的 `model_name`（如 `claude-sonnet-3`）发起请求。LiteLLM 的 team/key 配置限定每个用户只能访问其所属组的模型名。
+用户分配到某一组号后，应用层使用对应的 `model_name`（如 `claude-sonnet-4-6-grp1`）发起请求。LiteLLM 的 team/key 配置限定每个用户只能访问其所属组的模型名。
 
 ### 6.2 路由、限流与降级
 
@@ -230,7 +246,7 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 5. 对认证错误、权限错误、配额配置错误设置低重试或不重试，避免无效请求放大。
 6. 单独配置 `context_window_fallbacks` 和 `content_policy_fallbacks`，不要把所有错误都当作同一种故障。
 7. 定时任务必须使用 `batch-*` 模型组和独立 virtual key；生产网关应通过 key 权限、team model allowlist 或应用侧校验，阻止批处理任务调用交互式模型组。
-8. 各隔离组的 `fallbacks` 应优先降级到 Vertex Claude（同模型类型，如 `claude-sonnet-N` → `vertex-claude-sonnet`），再降级到 GPT（如 `gpt-frontier-N`），绝不降级到同模型的其他组号——避免违规流量扩散到健康组。该顺序确保 fallback 后模型行为一致性。`content_policy_fallbacks` 同理。
+8. 各隔离组的 `fallbacks` 应优先降级到 Vertex Claude（同模型类型，如 `claude-sonnet-4-6-grp{N}` → `vertex-claude-sonnet`），再降级到 GPT（如 `gpt-5.4-mini-grp{N}`），绝不降级到同模型的其他组号——避免违规流量扩散到健康组。该顺序确保 fallback 后模型行为一致性。`content_policy_fallbacks` 同理。
 
 ### 6.3 日志与审计
 
@@ -258,134 +274,181 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 
 1. 使用 virtual keys 按团队、应用、部门分配模型权限和预算。
 2. 对高成本模型设置审批或白名单，例如 Claude Opus、GPT 5.5。
-3. 对 `gpt-fast`、`claude-haiku` 设置默认轻量任务入口。
+3. 对 `gpt-5.4-mini`、`claude-haiku-4-5` 设置默认轻量任务入口。
 4. 对 `batch-*` 模型组设置更低默认预算、独立成本中心和任务级标签，避免定时任务挤占交互式研发预算。
 5. 将 `spend logs` 与成本中心、项目 ID、应用 ID 关联，支持内部 showback/chargeback。
 6. 建立容量日报：TPM 峰值、RPM 峰值、429 次数、fallback 次数、端点冷却次数、平均延迟、用户活跃数、定时任务调用量和批处理失败率。
 
 ## 7. Azure 自动化建议
 
-本仓库提供账号池批量创建工具，覆盖从订阅创建到模型端点就绪的全流程：
+本仓库提供账号池批量创建工具，分为两阶段流程：订阅创建与模型端点部署，便于在权限受限环境中分步测试。
 
-- **[scripts/create-foundry-pool.sh](scripts/create-foundry-pool.sh)**：多订阅 Foundry 池一键创建脚本，支持通过命令行参数指定批次命名前缀和创建套数。
+脚本清单：
+
+- **[scripts/create-subscriptions.sh](scripts/create-subscriptions.sh)**：第一阶段，创建 Azure 订阅并输出参数 CSV 文件。需要 EA/MCA billing scope 权限。
+  - 用户自行决定在 prefix 参数加入 claude/gpt/ds 字样区分一批订阅将要创建的模型类别，如 `llmpool-claude`，脚本本身不依赖于此逻辑工作，prefix 本身不输出到 CSV；
+  - 用户指定 prefix 用于命名订阅、foundry 实例，prefix 在输出 CSV 占一列；
+  - 支持正向选择模型类型（model_type, 用参数 `--claude`、`--gpt`、`--deepseek` 激活），指定多个时只有最后一个生效，确保一个订阅中只有一类模型；生效选项在 CSV 中占一列；
+  - 订阅名规则为 `{prefix}-{claude|gpt|deepseek}-sub{N}`;
+  - 所属管理组为可选参数；location 默认 eastus2；
+- **[scripts/deploy-models.sh](scripts/deploy-models.sh)**：第二阶段，基于参数 CSV 在各订阅下创建 resource group 和 Foundry 资源并部署模型端点。
+  - 基于 `create-subscriptions.sh` 的输出 CSV 读取订阅 ID、订阅名、prefix、模型类型（model_type）、location；
+  - 资源组名称固定为 `rg-foundry`，foundry 实例名称为 `fdry-{prefix}-{model_type}-{4 位随机数}`；
+  - 输出文件为 CSV 格式，包含全部订阅的全部模型端点、模型名和访问密钥；
+- **[scripts/delete-resources.sh](scripts/delete-resources.sh)**：清理脚本，删除订阅下的资源组 `rg-foundry` 并清除软删除状态，用于回归测试。
 - **[scripts/test-endpoints.sh](scripts/test-endpoints.sh)**：端点连通性验证脚本，自动遍历创建结果清单并逐一测试模型可访问性。
 
-### 7.1 create-foundry-pool.sh 功能
+### 7.1 两阶段部署流程
 
-脚本为每一套资源执行完整创建流程：
+#### 第一阶段：创建订阅（create-subscriptions.sh）
+
+需要 billing scope 权限，输出 `generated/subscriptions.csv`：
 
 1. 通过 EA/MCA billing scope 调用 Subscription Alias API 创建新订阅。
 2. 将新订阅移入指定管理组（可选）。
-3. 在新订阅中注册必要 resource provider。
-4. 创建资源组、Key Vault 和 AI Foundry（Cognitive Services AIServices）资源。
-5. 在 Foundry 资源上部署 Claude（Opus 4.7、Sonnet 4.6、Haiku 4.5）和 GPT 模型端点。
-6. 输出 CSV 清单，包含每个端点的订阅 ID、资源组、Foundry 名称、endpoint URL 和 Key Vault 名。
+3. 输出 CSV 参数文件 `./generated/subscriptions.csv`，包含字段 `subscription_id, subscription_name, prefix, model_type, location, anthropic-org, anthropic-industry, anthropic-country`。
 
-通过 `--prefix` 参数区分不同批次资源的命名，通过 `--count` 参数控制创建的订阅套数。
+#### 第二阶段：部署模型端点（deploy-models.sh）
 
-### 7.2 命令行用法
+基于参数 CSV 文件，在每个订阅中执行：
+
+1. 注册必要 resource provider（CognitiveServices、SaaS、MarketplaceOrdering 等）。
+2. 创建资源组和 AI Foundry（Cognitive Services AIServices）资源。
+3. 按 model_type 部署对应类型的模型端点。(从 CSV 获取 anthropic 有关参数)
+4. Claude 模型通过 REST API（api-version `2025-10-01-preview`）部署，包含 `modelProviderData`（organizationName、industry、countryCode，取自 CSV 的 anthropic-org, anthropic-industry, anthropic-country）。
+5. GPT 和 DeepSeek 模型通过 `az cognitiveservices account deployment create` 部署。
+6. 输出端点、模型名称、访问密钥清单 CSV `./generated/foundry-endpoints.csv`，包含字段 `model_endpoint, model_name, access_key`。
+
+### 7.2 支持的模型
+
+| 模型族 | 可用模型 | 部署格式 | 版本 |
+| --- | --- | --- | --- |
+| Claude | claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5 | Anthropic | 1, 1, 20251001 |
+| GPT | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano | OpenAI | 2026-04-24, 2026-03-05, 2026-03-17, 2026-03-17 |
+| DeepSeek | DeepSeek-V4-Pro, DeepSeek-V4-Flash | DeepSeek | 2026-04-23, 2026-04-23 |
+
+### 7.3 命令行用法
 
 ```bash
-# 列出所有 billing account
-az billing account list --query "[].{name:name, type:agreementType}" -o table
+# ==================== 第一阶段：创建订阅 ====================
+export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/{billing_account}/billingProfiles/{profile}/invoiceSections/{section}"
 
-# EA 示例
-export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/1234567/enrollmentAccounts/7654321"
-
-# MCA 示例
-export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/e879cf0f-xxxx:yyyy-zzzz/billingProfiles/AW4F-xxxx-BG7-TGB/invoiceSections/SH3V-xxxx-PJA-TGB"
-
-# 创建 3 套交互式订阅 + 1 套批处理订阅，前缀为 "teamA"
-scripts/create-foundry-pool.sh \
-  --prefix teamA \
-  --count 3 \
-  --batch-count 1 \
+# 创建 claude 10 个订阅
+scripts/create-subscriptions.sh \
+  --prefix demopool \
+  --claude \
+  --anthropic-org "Your Organization Name" \
+  --anthropic-industry Manufacturing \
+  --anthropic-country SG \
+  --count 10 \
   --location eastus2 \
-  --billing-scope "/providers/Microsoft.Billing/billingAccounts/.../invoiceSections/..."
+  --billing-scope "$BILLING_SCOPE" \
+  --mgmt-group grp-demoai
 
-# 仅创建 Claude 端点（不含 GPT），5 套，前缀 "claude-pool"
-scripts/create-foundry-pool.sh \
-  --prefix claude-pool \
-  --count 5 \
-  --no-gpt \
-  --no-batch \
-  --billing-scope "$BILLING_SCOPE"
+# ==================== 第二阶段：部署模型 ====================
+# 仅部署 CSV 文件指定端点
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions.csv
 
-# Dry run 模式：打印所有操作但不执行
-scripts/create-foundry-pool.sh --prefix test --count 2 --dry-run -s "$BILLING_SCOPE"
+# ==================== 清理与回归 ====================
+# 删除所有资源（含软删除清除）
+scripts/delete-resources.sh \
+  --input ./generated/subscriptions.csv --force
+
+# 验证端点
+VERBOSE=true scripts/test-endpoints.sh \
+  --input ./generated/foundry-endpoints.csv
 ```
 
-主要参数：
+### 7.4 参数说明
+
+**create-subscriptions.sh**：
 
 | 参数 | 说明 | 默认值 |
 | --- | --- | --- |
-| `-p, --prefix` | 资源命名前缀，用于区分批次 | `llmpool` |
-| `-n, --count` | 交互式订阅套数 | `10` |
-| `-b, --batch-count` | 批处理订阅套数 | `5` |
+| `-p, --prefix` | 资源命名前缀 | `llmpool` |
+| `--claude` | 部署 Claude 模型 | — |
+| `--gpt` | 部署 GPT 模型 | — |
+| `--deepseek` | 部署 DeepSeek 模型 | — |
+| `--anthropic-org` | Claude 模型创建参数 organizationName | `Contoso Pte.Ltd` |
+| `--anthropic-industry` | Claude 模型创建参数 industry | `Manufacturing` |
+| `--anthropic-country` | Claude 模型创建参数 countryCode | `SG` |
+| `-n, --count` | 订阅套数 | `10` |
 | `-l, --location` | Azure 区域 | `eastus2` |
 | `-s, --billing-scope` | EA/MCA 计费范围（必需） | — |
 | `-m, --mgmt-group` | 管理组 ID（可选） | — |
-| `--no-gpt` | 跳过 GPT 模型部署 | — |
-| `--no-claude` | 跳过 Claude 模型部署 | — |
-| `--no-batch` | 跳过批处理池创建 | — |
-| `--dry-run` | 仅打印操作，不实际执行 | — |
+| `--dry-run` | 仅打印操作 | — |
 
-### 7.3 端点连通性测试
+**deploy-models.sh**：
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `-i, --input` | 输入 CSV 文件 | `./generated/subscriptions.csv` |
+| `-t, --tpm` | 默认 TPM（可选，测试时指定低配额） | — |
+| `--dry-run` | 仅打印操作 | — |
+
+**delete-resources.sh**：
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `-i, --input` | 输入 CSV 文件 | `./generated/subscriptions.csv` |
+| `--force` | 跳过确认 | — |
+| `--no-purge` | 不清除软删除 | — |
+| `--dry-run` | 仅打印操作 | — |
+
+### 7.5 端点连通性测试
 
 创建完成后使用 `test-endpoints.sh` 验证端点可用性：
 
 ```bash
-# 使用默认 claude-sonnet-4-6 模型测试所有端点
+# 测试所有端点
 scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 
-# 指定测试 claude-haiku-4-5
-MODEL=claude-haiku-4-5 scripts/test-endpoints.sh
-
 # 显示完整响应
-VERBOSE=true scripts/test-endpoints.sh
+VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 ```
 
-### 7.4 注意事项
-
-需要注意：Foundry 新旧资源模型、Azure CLI 扩展、Marketplace 模型购买 API 和模型 deployment API 会随平台演进而变化。正式投产前，应在客户测试租户中完成以下验证：
+### 7.6 注意事项
 
 1. 使用 `--dry-run` 模式确认脚本将执行的操作。
 2. 在测试订阅中验证 Anthropic Claude 模型的 Marketplace 条款接受、区域可用性和部署 API 兼容性。
 3. 确认 billing scope 格式、服务主体权限和订阅配额限制。
 4. 部署完成后使用 `test-endpoints.sh` 验证所有端点的连通性和模型可访问性。
+5. Foundry 资源删除后有 48 小时软删除窗口期，`delete-resources.sh` 默认执行清除以支持立即重建。
+6. Claude 部署使用 REST API（api-version `2025-10-01-preview`）以支持 `modelProviderData` 字段；GPT 和 DeepSeek 使用标准 `az cognitiveservices` CLI。
+7. 跨订阅 quota 是共享的（如 GPT GlobalStandard quota 按区域聚合），需确保总部署容量不超过租户级别配额限制。
 
-### 7.5 实际命令举例
+### 7.7 实际命令举例
 
-举例如下，Claude 端点和 GPT 端点分开创建，Claude 不用于批处理任务。Foundry 模型端点 10 组，LiteLLM model_name 5 组，避免一个 model_name 影响全部 foundry 模型端点。
+举例如下，Claude、GPT 和 DeepSeek 端点分开创建。Foundry 模型端点 10 组，LiteLLM model_name 5 组，避免一个 model_name 影响全部 foundry 模型端点。
 
 ```sh
 export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/{_get_real_billingAccounts_}/billingProfiles/{_get_real_billingProfiles_}/invoiceSections/{_get_real_invoiceSections_}"
 
-scripts/create-foundry-pool.sh --prefix test --count 10 --dry-run -s "$BILLING_SCOPE"
-
-# location: eastus2 or swedencentral for Claude endpoint, since 202605
-# only for claude, with no batch
-scripts/create-foundry-pool.sh \
-  --mgmt-group grp-demoai \
-  --prefix democlaude2605 \
+# 10 个 claude 订阅
+scripts/create-subscriptions.sh \
+  --prefix demopool2605 \
+  --claude \
+  --anthropic-org "Contoso" \
+  --anthropic-industry Manufacturing \
+  --anthropic-country SG \
   --count 10 \
-  --batch-count 0 \
   --location eastus2 \
   --billing-scope "$BILLING_SCOPE" \
-  --no-batch \
-  --no-gpt
+  --mgmt-group grp-demoai
 
-# only for gpt, with batch
-scripts/create-foundry-pool.sh \
-  --mgmt-group grp-demoai \
-  --prefix demogpt2605 \
-  --count 10 \
-  --batch-count 1 \
-  --location eastus2 \
-  --billing-scope "$BILLING_SCOPE" \
-  --no-claude
+# 10 个 claude 端点
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions.csv
 
-VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-ep.txt
+# 验证
+VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
+
+# 回归测试：删除后重建
+scripts/delete-resources.sh --input ./generated/subscriptions.csv --force
+
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions.csv
 ```
 
 ## 8. MCP / Skill 推荐
@@ -409,189 +472,13 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv > test-
 | Hugging Face | `evalstate/mcp-hfspace`、`shreyaskarnik/huggingface-mcp-server` 或自建 wrapper | 社区/自建 | `HF_TOKEN` | 用于模型/数据集/Spaces 查询；上线前做供应链审查和权限收敛 |
 | Gmail | `vladmsv/mcp-server-gmail` 或自建 Google Workspace Gmail API wrapper | 社区/自建 | Google OAuth | 邮件数据敏感，建议先只读、限定 scope、强制人工确认发送邮件 |
 
-## 9. GitHub Copilot 请求留存方案
+## 9. GitHub Copilot 方案（独立文档）
 
-客户如要求留存 GitHub Copilot 请求用于审计和后续数据分析，可在员工 IDE 到 GitHub Copilot 服务之间部署企业代理。开源项目 [nikawang/mitmproxy-copilot](https://github.com/nikawang/mitmproxy-copilot) 提供了一个参考实现：基于 mitmproxy 拦截 HTTP/HTTPS 流量，通过 Python 脚本 `proxy-es.py` 将 Copilot 上下文、生成片段、开发者活动、代码生成和接受数据写入 Elasticsearch，并可通过 Kibana 做检索和可视化。mitmproxy 官方文档也说明其支持 HTTP/HTTPS/WebSocket 拦截、TLS 证书动态生成、保存完整 HTTP conversations、以及用 Python 脚本处理流量。
+GitHub Copilot 相关的完整内容（Copilot 桥接 Claude Code、请求审计留存、MCP 配置、企业部署建议）已汇总至独立文档：**[GitHub Copilot：中国区客户 Vibe Coding 首选推荐方案](github-copilot-solution.md)**。
 
-该方案的定位是审计代理，不改变 Copilot 请求内容，不将 Copilot 接入 LiteLLM，也不替代 GitHub Enterprise、Copilot Business/Enterprise 自带的组织级管理与审计能力。正式使用前必须完成法律告知、员工授权、数据分级、跨境与供应商条款评审，并确认代理不会违反 GitHub Copilot、GitHub Enterprise 或客户内部合规要求。
+该文档将 GitHub Copilot 定位为中国区客户 Vibe Coding 首选方案——不仅是模型 API，而是 Harness + 模型 API 的完整 Vibe Coding 解决方案。与本文档描述的 LiteLLM + Foundry 主方案互补并行。
 
-### 9.1 工作原理
-
-1. 员工 VS Code / JetBrains / CLI 将 HTTP(S) 代理指向企业 mitmproxy-copilot 服务。
-2. 客户端安装企业签发或代理生成的 mitmproxy 根证书，使 IDE 能通过代理建立 TLS 连接。
-3. mitmproxy 只对允许的 GitHub Copilot 相关域名做审计采集，其他域名应 passthrough 或拒绝，减少非目标数据采集。
-4. `proxy-es.py` 解析 Copilot 请求和响应，将用户标识、时间、模型/接口、上下文片段、生成片段、接受数据、错误和延迟写入 Elasticsearch。
-5. Elasticsearch / Kibana / SIEM 用于按用户、团队、仓库、时间范围、请求 ID、风险关键字和接受率做审计、质量分析与容量分析。
-
-### 9.2 参考部署步骤
-
-1. 从 [nikawang/mitmproxy-copilot](https://github.com/nikawang/mitmproxy-copilot) 拉取代码，在客户受控网络中进行源码、依赖、镜像和许可证审查；该项目 README 显示暂无正式 release，生产应固定 commit SHA 并构建客户自有镜像。
-2. 准备 Elasticsearch 与 Kibana，或替换 `proxy-es.py` 将数据写入客户指定的日志平台、对象存储或 SIEM。
-3. 按项目 README 使用 Dockerfile 构建镜像，例如 `docker build . -t mitmproxy-copilot:v1`；运行时挂载客户审查后的 `proxy-es.py` 与认证文件。认证文件应由 Key Vault、Kubernetes Secret 或企业密码库下发，不写入 Git。
-4. 在代理前放置负载均衡和健康检查；对多节点部署，统一证书、认证、日志 schema 和用户标识映射。
-5. 在员工终端安装代理根证书。Windows 可按 mitmproxy 文档和项目 README 示例使用 `certutil -addstore root mitmproxy-ca-cert.cer`，企业环境应优先通过 MDM、GPO 或终端管理系统下发。
-6. 在 IDE 中配置 HTTP 代理，格式为 `http://<user>:<password>@<proxy-host>:<proxy-port>`；如启用严格 TLS 校验，确保证书链被终端信任。
-7. 分批试点，验证 Copilot 登录、补全、Chat、模型选择、MCP 调用和网络降级行为；按请求 ID 抽查代理日志、GitHub 侧审计日志和终端日志是否可关联。
-
-### 9.3 风险与控制
-
-1. 不修改 Copilot 请求字段、头部、body 或响应内容；项目 README 明确提醒修改 HTTP 字段可能被 GitHub 检测并导致账号风险。
-2. 代理采集内容可能包含源代码、prompt、生成代码、个人信息和客户机密，必须默认加密存储、限制访问、设置留存周期和审批流程。
-3. 代理自身是敏感基础设施，应启用访问日志、管理员操作审计、漏洞扫描、镜像签名、最小权限和高可用部署。
-4. 对高敏感团队可以只采集元数据或脱敏摘要；完整请求/响应采集需单独审批。
-5. 定期核验 GitHub Copilot 客户端域名、协议和产品行为变化，避免因客户端升级造成漏采、阻断或误采。
-
-## 10. Vibe Coding 方案 B：GitHub Copilot 桥接 Claude Code
-
-除 "Claude Code + LiteLLM + Foundry Claude endpoint" 主方案外，客户如需在不依赖自建 LiteLLM 网关的前提下为员工提供 Claude Code（或 OpenClaw 等本地 Agent Harness）能力，可通过 GitHub Copilot 的模型 API 桥接实现。该方案使用开源 `copilot-api` 代理将 GitHub Copilot 后端暴露为本地 OpenAI 兼容 HTTP 端点，供 Claude Code 或其他 Agent 工具直接消费。
-
-**方案定位**：与 "Claude Code + LiteLLM + Foundry Claude endpoint" 同级别的 Vibe Coding 软件解决方案，适合以下场景：
-
-1. 客户已为员工采购 GitHub Copilot Business/Enterprise 账号。
-2. 不希望为少数高级 Vibe Coding 用户额外搭建 LiteLLM 网关和 Foundry 端点。
-3. 需要在本地 Claude Code 或 OpenClaw 等 Agent 中直接使用高质量模型。
-4. 接受每个 Copilot 账号只服务一个终端的限制。
-
-### 10.1 架构概览
-
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         员工本地开发终端                                        │
-│                                                                              │
-│  ┌─────────────┐    HTTP :4141     ┌─────────────────┐                       │
-│  │ Claude Code │ ─────────────────→│  copilot-api    │                       │
-│  │ / OpenClaw  │ ←─────────────────│  (本地代理)      │                       │
-│  │ / Aider     │   模型响应         │  端口 4141       │                       │
-│  └─────────────┘                   └────────┬────────┘                       │
-│                                             │                                │
-└─────────────────────────────────────────────┼────────────────────────────────┘
-                                              │ HTTPS (GitHub Device Auth)
-                                              │ 使用员工个人 Copilot 账号
-                                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     GitHub Copilot 云端服务                                    │
-│                                                                             │
-│   可用模型：Claude Sonnet 4.5 / Opus 4 / Gemini 2.5 Pro / O3 等             │
-│   认证：GitHub Device Flow → OAuth Token                                    │
-│   限制：单账号单终端使用，避免并发异常                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                    企业审计层 (可选，推荐)                                      │
-│                                                                              │
-│  ┌─────────────┐            ┌────────────────┐          ┌───────────────┐   │
-│  │ Claude Code │──HTTP(S)──→│ mitmproxy /    │──写入──→ │ Elasticsearch │   │
-│  │ copilot-api │            │ mitmproxy-     │          │ / Kibana      │   │
-│  │ 出站流量     │            │ copilot        │          │ / SIEM        │   │
-│  └─────────────┘            └────────────────┘          └───────────────┘   │
-│                                                                              │
-│  mitmproxy 拦截 copilot-api 到 GitHub 的所有 HTTPS 请求，                     │
-│  将 prompt、模型响应、token 用量等写入审计存储，                                │
-│  实现与主方案同等的请求留存能力。                                               │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 10.2 工作原理
-
-1. 员工在本地安装 `copilot-api`（npm 包），启动后通过 GitHub Device Flow 完成一次性 OAuth 认证。
-2. `copilot-api` 在本地 `localhost:4141` 暴露 OpenAI 兼容 HTTP 接口，将请求转发至 GitHub Copilot 后端模型（Claude Sonnet、Opus、Gemini、O3 等）。
-3. Claude Code 通过 `ANTHROPIC_BASE_URL=http://localhost:4141` 配置将所有模型请求路由到本地 `copilot-api`，无需 Anthropic API Key。
-4. OpenClaw 等其他支持 OpenAI 兼容接口的本地 Agent 方案，可用相同方式接入。
-5. 若需审计留存，可在 `copilot-api` 出站方向部署 mitmproxy，拦截并记录所有到 GitHub Copilot 服务的 HTTPS 请求/响应。
-
-### 10.3 部署步骤
-
-#### 10.3.1 基础部署（无审计）
-
-```bash
-# 1. 安装 copilot-api 和 Claude Code
-npm install -g copilot-api @anthropic-ai/claude-code
-
-# 2. 启动 copilot-api 并完成 GitHub 认证
-copilot-api start --proxy-env
-# 按提示访问 https://github.com/login/device 并输入设备码
-
-# 3. 配置 Claude Code（~/.claude/settings.json）
-cat > ~/.claude/settings.json << 'EOF'
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:4141",
-    "ANTHROPIC_AUTH_TOKEN": "sk-dummy",
-    "ANTHROPIC_MODEL": "claude-sonnet-4.5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5-mini",
-    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
-  }
-}
-EOF
-
-# 4. 新终端中启动 Claude Code
-claude
-```
-
-#### 10.3.2 带审计留存的部署
-
-在 `copilot-api` 与 GitHub Copilot 云端之间加入 mitmproxy 层：
-
-```bash
-# 1. 部署 mitmproxy-copilot（参考第 9 章）
-docker build -t mitmproxy-copilot:v1 .
-docker run -d -p 8080:8080 \
-  -v /path/to/proxy-es.py:/app/proxy-es.py \
-  -e ES_HOST=https://elasticsearch.internal:9200 \
-  mitmproxy-copilot:v1
-
-# 2. 启动 copilot-api 时指定出站代理
-HTTPS_PROXY=http://localhost:8080 copilot-api start --proxy-env
-
-# 3. 在员工终端安装 mitmproxy 根证书（信任代理 TLS）
-# macOS:
-security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain mitmproxy-ca-cert.pem
-# Windows (企业应通过 GPO/MDM 下发):
-certutil -addstore root mitmproxy-ca-cert.cer
-
-# 4. Claude Code 配置不变，照常使用
-claude
-```
-
-### 10.4 适用工具
-
-| 工具 | 接入方式 | 说明 |
-| --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL` 指向 `copilot-api` | 官方 CLI，功能完整 |
-| OpenClaw | OpenAI 兼容 base URL 指向 `copilot-api` | 本地 Agent Harness |
-| Aider | `--openai-api-base http://localhost:4141` | AI pair programming |
-| Cline (VS Code) | 配置 Copilot 为 LLM provider | VS Code 扩展已原生支持 |
-
-### 10.5 约束与风险
-
-1. **单终端限制**：每个 GitHub Copilot 账号同一时刻只能服务一个 `copilot-api` 实例。多终端并发使用同一账号会触发 GitHub 服务器侧异常行为检测，可能导致账号被临时或永久封禁。
-2. **不可池化**：该方案不适合多用户共享或服务端无人值守场景。每位员工必须使用自己的 Copilot 账号和独立 `copilot-api` 实例。
-3. **模型可用性依赖 GitHub**：可用模型列表、配额、速率限制由 GitHub Copilot 后端控制，客户无法自行扩容或保证 SLA。
-4. **合规前提**：GitHub 官方文档已说明通过 API 调用 Copilot 模型属于支持的用法（参考 [Copilot Extensions Agent 文档](https://docs.github.com/en/copilot/how-tos/build-copilot-extensions/building-a-copilot-agent-for-your-copilot-extension/using-copilots-llm-for-your-agent)），Aider、Cline 等工具已实现类似集成。但企业正式采用前仍需核实 GitHub Copilot 服务条款、企业协议和客户内部合规要求。
-5. **审计依赖 mitmproxy**：该方案不经过 LiteLLM，无法直接获得 LiteLLM 的 virtual key、team budget、spend logs 和集中式审计能力。如需 prompt 留存和审计，必须配合 mitmproxy 或同等审计代理（详见第 9 章）。
-6. **`copilot-api` 为社区项目**：生产采用前需完成源码审查、依赖扫描和版本固定，并评估项目维护状态和安全响应能力。
-
-### 10.6 与主方案对比
-
-| 维度 | 主方案（Claude Code + LiteLLM + Foundry） | 方案 B（Copilot 桥接 Claude Code） |
-| --- | --- | --- |
-| 模型供应 | 自建 Foundry 端点，容量可控 | 依赖 GitHub Copilot 后端 |
-| 多用户支持 | 1000+ 员工集中服务 | 单账号单终端 |
-| 模型类型 | Claude + GPT 全系列 | Copilot 开放的模型子集 |
-| 审计能力 | LiteLLM 原生日志 + Langfuse/OTel | 需额外部署 mitmproxy |
-| 成本治理 | virtual key / team budget / chargeback | 无集中成本治理 |
-| 部署复杂度 | 高（AKS/Redis/PG/Key Vault） | 低（本地 npm 包 + 可选 mitmproxy） |
-| 适用场景 | 企业全员 API 服务 | 少量高级用户 Vibe Coding |
-| 依赖条件 | Azure 订阅 + Foundry 配额 | GitHub Copilot 账号 |
-
-### 10.7 推荐使用策略
-
-1. 对全员规模化 API 服务，以主方案（LiteLLM + Foundry）为主。
-2. 对少数高级开发者或特殊项目需要快速获得 Claude Code 能力且不愿等待网关部署的，可作为过渡方案启用方案 B。
-3. 两种方案可并行运行：主方案服务 API 调用和自动化任务；方案 B 服务少数员工的本地 Vibe Coding 需求。
-4. 无论采用哪种方案，均应通过 mitmproxy 或同等机制实现 prompt 请求留存，满足企业审计要求。
-
-## 11. 安全、合规与治理
+## 10. 安全、合规与治理
 
 1. 应用访问 LiteLLM 使用 virtual key，不直接访问底层模型端点。
 2. LiteLLM 到 Foundry 使用 Key Vault 管理密钥，定期轮换。
@@ -603,7 +490,7 @@ claude
 8. GitHub Copilot 请求留存必须完成员工告知、授权、最小化采集、留存审批和访问审计；代理账号、证书和 Elasticsearch 凭据不得出现在仓库中。
 9. 定时任务账号池不得用于规避模型安全策略；异常重复 prompt、风控命中和供应商告警必须进入安全事件流程。
 
-## 12. 实施路线图
+## 11. 实施路线图
 
 | 阶段 | 周期 | 关键任务 | 退出标准 |
 | --- | --- | --- | --- |
@@ -613,7 +500,7 @@ claude
 | 3. 生产试运行 | 2 周 | 接入试点团队，启用 virtual key、预算、审计，试点 Copilot 代理留存 | 100-200 人稳定使用，Copilot 审计链路可查询 |
 | 4. 全员上线 | 持续 | 扩展到 1000 人，建立容量日报和异常演练 | SLA、成本和审计指标达标 |
 
-## 13. 验证与演练
+## 12. 验证与演练
 
 1. 容量压测：逐步提升到单模型组 60%、80%、100% 规划容量。
 2. 故障演练：模拟单 subscription 429、单区域超时、单模型不可用、Vertex fallback。
@@ -623,10 +510,10 @@ claude
 6. 定时任务隔离验证：批处理 virtual key 只能访问 `batch-*` 模型组，交互式 key 默认不能访问批处理池；重复 prompt 触发暂停和人工复核流程。
 9. model_name 隔离验证：模拟某组端点被封禁，确认仅该组用户受影响，其他组可正常使用；确认 fallback 不跨组、只跨模型。
 7. 日志归档验证：夜间 DMS/ETL 任务能迁移 30 天以上日志，完成行数校验、查询回放和源端清理，且失败时不删除源数据。
-8. Copilot 留存验证：抽样确认 IDE 请求经代理写入 Elasticsearch/SIEM，证书、代理认证、用户映射和脱敏策略符合安全评审要求。
-10. Copilot 桥接 Claude Code 验证：确认 copilot-api 本地代理启动后 Claude Code 可正常调用模型；配合 mitmproxy 时验证 prompt 完整留存到 Elasticsearch/SIEM，且不影响模型交互延迟和功能。
+8. Copilot 留存验证：抽样确认 IDE 请求经代理写入 Elasticsearch/SIEM，证书、代理认证、用户映射和脱敏策略符合安全评审要求（详见 [github-copilot-solution.md](github-copilot-solution.md)）。
+10. Copilot 桥接 Claude Code 验证：确认 copilot-api 本地代理启动后 Claude Code 可正常调用模型；配合 mitmproxy 时验证 prompt 完整留存（详见 [github-copilot-solution.md](github-copilot-solution.md)）。
 
-## 14. 资料核验说明
+## 13. 资料核验说明
 
 交付前建议再次核验以下官方来源，因为模型、区域、quota tier 和 MCP 能力更新较快：
 

@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-This repository is a Chinese enterprise solution package for a high-availability Claude/GPT API supply pool. The primary artifact is [llm-api-pool-solution.md](llm-api-pool-solution.md); supporting examples live in [config/litellm-config.example.yaml](config/litellm-config.example.yaml), [scripts/create-foundry-pool.sh](scripts/create-foundry-pool.sh), and [.vscode/mcp.example.json](.vscode/mcp.example.json).
+This repository is a Chinese enterprise solution package for a high-availability Claude/GPT API supply pool. The primary artifact is [llm-api-pool-solution.md](llm-api-pool-solution.md); supporting examples live in [config/litellm-config.example.yaml](config/litellm-config.example.yaml), [scripts/](scripts/) (create-subscriptions, deploy-models, delete-resources, test-endpoints), [.vscode/mcp.example.json](.vscode/mcp.example.json), and [github-copilot-solution.md](github-copilot-solution.md).
 
 ## Working Rules
 
 - Keep the main solution document in Chinese, with enterprise architecture tone, numbered sections, tables where useful, and explicit caveats for compliance, quota, Marketplace, region, and customer-tenant validation.
 - Do not copy large blocks from existing docs into new guidance. Link to [README.md](README.md), [llm-api-pool-solution.md](llm-api-pool-solution.md), or the relevant example file instead.
 - Never add real tenant IDs, subscription IDs, API keys, tokens, customer names, endpoints, or secrets. Use placeholders, Bash environment variables, LiteLLM `os.environ/NAME`, and Azure Key Vault references.
-- Treat GitHub Copilot as an IDE/CLI fallback workflow only, not as a LiteLLM backend or unattended service-side API pool.
+- GitHub Copilot is the recommended Vibe Coding solution (described in github-copilot-solution.md), not a LiteLLM backend or unattended service-side API pool.
 - Community MCP packages are examples until reviewed. Preserve source/dependency review, least privilege, local employee authorization, and human confirmation for write actions.
 
 ## File Conventions
@@ -22,7 +22,7 @@ This repository is a Chinese enterprise solution package for a high-availability
 ## Validation
 
 - There is no repository build or test suite. Use focused validation for the files touched: editor diagnostics for Markdown/YAML/JSON, shell syntax checks for Bash, and manual review for placeholder-only secrets.
-- For script changes, prefer `bash -n scripts/create-foundry-pool.sh` as the first executable check.
+- For script changes, run `bash -n scripts/*.sh` as the first executable check.
 - For configuration changes, verify YAML/JSON syntax and confirm all secret-like values are placeholders or environment references.
 
 ## Current Work Queue

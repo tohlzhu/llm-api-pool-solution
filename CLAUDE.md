@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a solution design repository (not a runnable application) for a Chinese enterprise LLM API supply pool. The primary deliverable is `llm-api-pool-solution.md` — a Chinese-language architecture document describing a multi-subscription Azure Foundry + LiteLLM gateway setup serving ~1000 employees with Claude and GPT models.
 
-Supporting artifacts: `scripts/create-foundry-pool.sh` (Azure CLI automation), `config/litellm-config.example.yaml` (LiteLLM proxy config), `.vscode/mcp.example.json` (VS Code MCP setup).
+Supporting artifacts: `scripts/create-subscriptions.sh`, `scripts/deploy-models.sh`, `scripts/delete-resources.sh`, `scripts/test-endpoints.sh` (Azure CLI automation), `config/litellm-config.example.yaml` (LiteLLM proxy config), `.vscode/mcp.example.json` (VS Code MCP setup), `github-copilot-solution.md` (GitHub Copilot standalone guide).
 
 ## Validation Commands
 
@@ -14,7 +14,10 @@ There is no build system or test suite. Validate touched files individually:
 
 ```bash
 # Bash script syntax check
-bash -n scripts/create-foundry-pool.sh
+bash -n scripts/create-subscriptions.sh
+bash -n scripts/deploy-models.sh
+bash -n scripts/delete-resources.sh
+bash -n scripts/test-endpoints.sh
 
 # YAML syntax check (requires python3)
 python3 -c "import yaml; yaml.safe_load(open('config/litellm-config.example.yaml'))"
@@ -27,7 +30,7 @@ python3 -c "import json; json.load(open('.vscode/mcp.example.json'))"
 
 - **Language**: Main solution document and README are in Chinese with enterprise architecture tone. Use numbered sections, tables, and explicit caveats for compliance/quota/region constraints.
 - **No secrets**: Never add real tenant IDs, subscription IDs, API keys, tokens, or endpoints. Use Bash env vars, `os.environ/NAME` (LiteLLM syntax), or Key Vault references.
-- **Copilot positioning**: GitHub Copilot is an IDE/CLI fallback only — never a LiteLLM backend or unattended API source.
+- **Copilot positioning**: GitHub Copilot is the recommended Vibe Coding solution (Harness + Model API), described in `github-copilot-solution.md`. Not a LiteLLM backend or unattended API source.
 - **MCP servers**: Community MCP packages are examples pending review. Preserve local-auth-first, least-privilege, human-confirmation-for-writes principles.
 - **Markdown structure**: Update related sections consistently rather than appending disconnected notes. Link to other repo files instead of duplicating content.
 - **LiteLLM config style**: Use `model_list` with per-deployment `tpm`, `rpm`, `max_parallel_requests`, `model_info`, Redis-backed router state, fallbacks, and audit controls.

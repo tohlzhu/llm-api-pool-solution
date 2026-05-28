@@ -1,80 +1,114 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Test connectivity for all Foundry endpoints listed in the inventory CSV.
-# Sends a minimal request to each Claude and GPT deployment to verify accessibility.
+# test-endpoints.sh — Test connectivity for Foundry model endpoints.
+# Reads foundry-endpoints.csv and sends a minimal request to each endpoint via curl + key.
 
-INVENTORY="${1:-./generated/foundry-endpoints.csv}"
-MODEL="${MODEL:-claude-sonnet-4-6}"
+# ---------- Defaults ----------
+
+INPUT_FILE="${1:-./generated/foundry-endpoints.csv}"
 MAX_TOKENS="${MAX_TOKENS:-50}"
 TIMEOUT="${TIMEOUT:-30}"
 VERBOSE="${VERBOSE:-false}"
 
+# ---------- CLI ----------
+
 usage() {
   cat <<EOF >&2
-Usage: $(basename "$0") [INVENTORY_CSV] [OPTIONS]
+Usage: $(basename "$0") [OPTIONS] [INVENTORY_CSV]
 
-Test connectivity for Foundry endpoints in the inventory file.
+Test connectivity for Foundry model endpoints.
 
 Arguments:
   INVENTORY_CSV   Path to foundry-endpoints.csv (default: ./generated/foundry-endpoints.csv)
 
+Options:
+  -i, --input FILE    Input CSV file (alternative to positional arg)
+      --verbose       Show full response body
+  -h, --help          Show this help
+
 Environment variables:
-  MODEL           Model to test (default: claude-sonnet-4-6)
-  MAX_TOKENS      Max tokens for test request (default: 50)
-  TIMEOUT         Curl timeout in seconds (default: 30)
-  VERBOSE         Show full response body (default: false)
+  MAX_TOKENS    Max tokens for test request (default: 50)
+  TIMEOUT       Curl timeout in seconds (default: 30)
+  VERBOSE       Show full response body (default: false)
+
+Input CSV format (from deploy-models.sh):
+  model_endpoint, model_name, access_key
 
 Examples:
   $(basename "$0")
   $(basename "$0") ./generated/foundry-endpoints.csv
-  MODEL=claude-haiku-4-5 $(basename "$0")
   VERBOSE=true $(basename "$0")
 EOF
   exit 1
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-fi
+# Handle options before positional
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)    usage ;;
+    --verbose)    VERBOSE="true" ;;
+    -i)           ;; # handled below
+  esac
+done
 
-if [[ ! -f "$INVENTORY" ]]; then
-  echo "ERROR: Inventory file not found: $INVENTORY" >&2
-  echo "Run create-foundry-pool.sh first to generate the inventory." >&2
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -i|--input)   INPUT_FILE="$2"; shift 2 ;;
+    --verbose)    VERBOSE="true"; shift ;;
+    -h|--help)    usage ;;
+    *)
+      if [[ -f "$1" ]]; then
+        INPUT_FILE="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+  echo "ERROR: Input file not found: $INPUT_FILE" >&2
+  echo "Run deploy-models.sh first to generate the endpoint inventory." >&2
   exit 1
 fi
+
+# ---------- Helpers ----------
 
 log() {
   echo "[$(date '+%H:%M:%S')] $*" >&2
 }
 
-test_claude_endpoint() {
-  local account_name="$1"
-  local resource_group="$2"
-  local endpoint="$3"
-  local model="$4"
+is_claude_model() {
+  [[ "$1" == claude-* ]]
+}
 
-  local api_key
-  api_key="$(az cognitiveservices account keys list \
-    --name "$account_name" \
-    --resource-group "$resource_group" \
-    --query key1 -o tsv --only-show-errors 2>/dev/null)" || {
-    echo "  SKIP: Cannot retrieve key for $account_name"
-    return 1
-  }
+is_deepseek_model() {
+  [[ "$1" == DeepSeek-* || "$1" == deepseek-* ]]
+}
+
+# ---------- Test functions ----------
+
+test_openai_compatible() {
+  local endpoint="$1"
+  local model_name="$2"
+  local api_key="$3"
 
   local base_url="${endpoint%/}"
+  # For OpenAI-compatible endpoints, the endpoint already includes /openai/deployments/model_name
+  # We need to use the chat completions path
+  local url="${base_url}/chat/completions?api-version=2024-12-01-preview"
+
   local response
   response="$(curl -s -w "\n%{http_code}" \
     --max-time "$TIMEOUT" \
-    "${base_url}/openai/deployments/${model}/chat/completions?api-version=2024-12-01-preview" \
+    "$url" \
     -H "api-key: ${api_key}" \
     -H "Content-Type: application/json" \
     -d "{
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_tokens\": ${MAX_TOKENS}
     }" 2>/dev/null)" || {
-    echo "  FAIL: Connection timeout or error for $account_name/$model"
+    echo "  FAIL: Connection error for $model_name"
     return 1
   }
 
@@ -84,13 +118,13 @@ test_claude_endpoint() {
   body="$(echo "$response" | sed '$d')"
 
   if [[ "$http_code" == "200" ]]; then
-    echo "  PASS: $account_name/$model (HTTP $http_code)"
+    echo "  PASS: $model_name (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
     return 0
   else
-    echo "  FAIL: $account_name/$model (HTTP $http_code)"
+    echo "  FAIL: $model_name (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
@@ -98,34 +132,29 @@ test_claude_endpoint() {
   fi
 }
 
-test_claude_native_endpoint() {
-  local account_name="$1"
-  local resource_group="$2"
-  local endpoint="$3"
-  local model="$4"
+test_claude_native() {
+  local endpoint="$1"
+  local model_name="$2"
+  local api_key="$3"
 
-  local api_key
-  api_key="$(az cognitiveservices account keys list \
-    --name "$account_name" \
-    --resource-group "$resource_group" \
-    --query key1 -o tsv --only-show-errors 2>/dev/null)" || {
-    echo "  SKIP: Cannot retrieve key for $account_name"
-    return 1
-  }
+  # Extract base URL from the full deployment endpoint path
+  # endpoint is like: https://fdry-xxx.cognitiveservices.azure.com/openai/deployments/claude-sonnet-4-6
+  local base_url
+  base_url="$(echo "$endpoint" | sed 's|/openai/deployments/.*||')"
+  local url="${base_url}/anthropic/v1/messages"
 
-  local base_url="${endpoint%/}"
   local response
   response="$(curl -s -w "\n%{http_code}" \
     --max-time "$TIMEOUT" \
-    "${base_url}/anthropic/v1/messages" \
+    "$url" \
     -H "api-key: ${api_key}" \
     -H "Content-Type: application/json" \
     -d "{
-      \"model\": \"${model}\",
+      \"model\": \"${model_name}\",
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_tokens\": ${MAX_TOKENS}
     }" 2>/dev/null)" || {
-    echo "  FAIL: Connection timeout or error for $account_name/$model (native)"
+    echo "  FAIL: Connection error for $model_name [native Anthropic API]"
     return 1
   }
 
@@ -135,13 +164,13 @@ test_claude_native_endpoint() {
   body="$(echo "$response" | sed '$d')"
 
   if [[ "$http_code" == "200" ]]; then
-    echo "  PASS: $account_name/$model [native Anthropic API] (HTTP $http_code)"
+    echo "  PASS: $model_name [native Anthropic API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
     return 0
   else
-    echo "  FAIL: $account_name/$model [native Anthropic API] (HTTP $http_code)"
+    echo "  FAIL: $model_name [native Anthropic API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
@@ -152,8 +181,7 @@ test_claude_native_endpoint() {
 # ---------- Main ----------
 
 main() {
-  log "Testing endpoints from: $INVENTORY"
-  log "Test model: $MODEL"
+  log "Testing endpoints from: $INPUT_FILE"
   echo ""
 
   local total=0
@@ -161,29 +189,33 @@ main() {
   local failed=0
   local skipped=0
 
-  while IFS=',' read -r pool_role subscription_id resource_group foundry_resource endpoint key_vault; do
+  while IFS=',' read -r model_endpoint model_name access_key; do
     # Skip header
-    if [[ "$pool_role" == "pool_role" ]]; then
+    if [[ "$model_endpoint" == "model_endpoint" ]]; then
       continue
     fi
 
-    total=$((total + 1))
-    echo "[$total] $foundry_resource ($pool_role, sub=$subscription_id)"
+    # Trim
+    model_endpoint="$(echo "$model_endpoint" | xargs)"
+    model_name="$(echo "$model_name" | xargs)"
+    access_key="$(echo "$access_key" | xargs)"
 
-    # Set subscription context
-    az account set --subscription "$subscription_id" --only-show-errors 2>/dev/null || {
-      echo "  SKIP: Cannot switch to subscription $subscription_id"
+    total=$((total + 1))
+    echo "[$total] $model_name → $model_endpoint"
+
+    if [[ -z "$access_key" ]]; then
+      echo "  SKIP: No access key available"
       skipped=$((skipped + 1))
       continue
-    }
+    fi
 
-    # Test with OpenAI-compatible endpoint
-    if test_claude_endpoint "$foundry_resource" "$resource_group" "$endpoint" "$MODEL"; then
+    # Try OpenAI-compatible first
+    if test_openai_compatible "$model_endpoint" "$model_name" "$access_key"; then
       passed=$((passed + 1))
     else
-      # Fallback: try native Anthropic API path for Claude models
-      if [[ "$MODEL" == claude-* ]]; then
-        if test_claude_native_endpoint "$foundry_resource" "$resource_group" "$endpoint" "$MODEL"; then
+      # For Claude models, try native Anthropic API
+      if is_claude_model "$model_name"; then
+        if test_claude_native "$model_endpoint" "$model_name" "$access_key"; then
           passed=$((passed + 1))
         else
           failed=$((failed + 1))
@@ -192,9 +224,8 @@ main() {
         failed=$((failed + 1))
       fi
     fi
-
     echo ""
-  done < "$INVENTORY"
+  done < "$INPUT_FILE"
 
   echo "========================================="
   echo "Results: $passed passed, $failed failed, $skipped skipped (total: $total)"
