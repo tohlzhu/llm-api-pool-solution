@@ -343,7 +343,7 @@ scripts/create-subscriptions.sh \
   --prefix demopool \
   --claude \
   --anthropic-org "Your Organization Name" \
-  --anthropic-industry Manufacturing \
+  --anthropic-industry manufacturing \
   --anthropic-country SG \
   --count 10 \
   --location eastus2 \
@@ -381,7 +381,7 @@ VERBOSE=true scripts/test-endpoints.sh \
 | `--gpt` | 部署 GPT 模型 | — |
 | `--deepseek` | 部署 DeepSeek 模型 | — |
 | `--anthropic-org` | Claude 模型创建参数 organizationName | `Contoso Pte.Ltd` |
-| `--anthropic-industry` | Claude 模型创建参数 industry | `Manufacturing` |
+| `--anthropic-industry` | Claude 模型创建参数 industry | `manufacturing` |
 | `--anthropic-country` | Claude 模型创建参数 countryCode | `SG` |
 | `-n, --count` | 订阅套数 | `10` |
 | `-l, --location` | Azure 区域 | `eastus2` |
@@ -444,7 +444,7 @@ scripts/create-subscriptions.sh \
   --prefix demopool2605 \
   --claude \
   --anthropic-org "Contoso" \
-  --anthropic-industry Manufacturing \
+  --anthropic-industry manufacturing \
   --anthropic-country SG \
   --count 10 \
   --location eastus2 \

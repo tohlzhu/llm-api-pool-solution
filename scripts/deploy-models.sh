@@ -92,6 +92,51 @@ require_command() {
   fi
 }
 
+resolve_anthropic_params() {
+  local subscription_id="$1"
+  local -n _org="$2"
+  local -n _industry="$3"
+  local -n _country="$4"
+
+  if [[ -n "$_org" && -n "$_industry" && -n "$_country" ]]; then
+    return 0
+  fi
+
+  local home_tenant
+  home_tenant="$(az account show --subscription "$subscription_id" --query "homeTenantId" -o tsv --only-show-errors 2>/dev/null || true)"
+  if [[ -z "$home_tenant" ]]; then
+    log "  WARNING: Unable to resolve homeTenantId for subscription $subscription_id"
+    return 0
+  fi
+
+  if [[ -z "$_org" ]]; then
+    _org="$(az rest --method get \
+      --url "https://management.azure.com/tenants?api-version=2022-12-01" \
+      --query "value[?tenantId=='${home_tenant}'].displayName | [0]" -o tsv --only-show-errors 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$_country" ]]; then
+    _country="$(az rest --method get \
+      --url "https://management.azure.com/tenants?api-version=2022-12-01" \
+      --query "value[?tenantId=='${home_tenant}'].countryCode | [0]" -o tsv --only-show-errors 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$_industry" ]]; then
+    _industry="manufacturing"
+  fi
+
+  if [[ -z "$_org" || -z "$_country" ]]; then
+    log "  WARNING: Could not auto-resolve all Anthropic params from tenant $home_tenant (org=${_org:-<empty>}, country=${_country:-<empty>})"
+    log "  Please specify anthropic-org and anthropic-country in the CSV for this subscription"
+  else
+    log "  Anthropic params (auto-resolved): organizationName=${_org}, industry=${_industry}, countryCode=${_country}"
+    if [[ "$_org" == "默认目录" || "$_org" == "Default Directory" || "$_org" =~ ^默认 ]]; then
+      log "  WARNING: organizationName='${_org}' appears to be a placeholder, not a legal entity name."
+      log "  Consider specifying the actual company name via anthropic-org column in the CSV."
+    fi
+  fi
+}
+
 log() {
   echo "[$(date '+%H:%M:%S')] $*" >&2
 }
@@ -537,6 +582,11 @@ main() {
         az account set --subscription "$subscription_id" --only-show-errors
       else
         echo "[DRY-RUN] az account set --subscription $subscription_id" >&2
+      fi
+
+      # Auto-resolve Anthropic parameters from tenant if not specified in CSV
+      if [[ "$model_type" == "claude" ]]; then
+        resolve_anthropic_params "$subscription_id" anthropic_org anthropic_industry anthropic_country
       fi
 
       # Register providers
