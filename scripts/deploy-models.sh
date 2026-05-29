@@ -306,17 +306,23 @@ get_access_key() {
     echo "dry-run-key-placeholder"
     return 0
   fi
-  local key
-  key="$(az cognitiveservices account keys list \
-    --name "$account_name" \
-    --resource-group "$resource_group" \
-    --query key1 -o tsv --only-show-errors 2>/dev/null || true)"
-  if [[ -n "$key" ]]; then
-    echo "$key"
-  else
-    az account get-access-token --resource https://cognitiveservices.azure.com \
-      --query accessToken -o tsv --only-show-errors 2>/dev/null || echo ""
-  fi
+  local key=""
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    key="$(az cognitiveservices account keys list \
+      --name "$account_name" \
+      --resource-group "$resource_group" \
+      --query key1 -o tsv --only-show-errors 2>/dev/null || true)"
+    if [[ -n "$key" ]]; then
+      echo "$key"
+      return 0
+    fi
+    log "  Waiting for access key to become available (attempt $attempt/5)..."
+    sleep 5
+  done
+  log "  WARNING: Could not retrieve API key after retries, falling back to access token"
+  az account get-access-token --resource https://cognitiveservices.azure.com \
+    --query accessToken -o tsv --only-show-errors 2>/dev/null || echo ""
 }
 
 # ---------- Deployment existence check ----------
@@ -613,6 +619,10 @@ main() {
           ;;
       esac
 
+      # Get access key once per account (shared across all deployments)
+      local access_key
+      access_key="$(get_access_key "$account_name" "$resource_group")"
+
       IFS=',' read -ra models <<< "$models_list"
       for model_entry in "${models[@]}"; do
         local m_name="${model_entry%%|*}"
@@ -635,7 +645,7 @@ main() {
 
         # Write endpoint entry
         printf "%s,%s,%s\n" \
-          "${endpoint%/}/openai/deployments/${m_name}" "$m_name" "$(get_access_key "$account_name" "$resource_group")" \
+          "${endpoint%/}/openai/deployments/${m_name}" "$m_name" "$access_key" \
           >> "$output_csv"
       done
     ); then
