@@ -443,20 +443,41 @@ export BILLING_SCOPE="/providers/Microsoft.Billing/billingAccounts/{_get_real_bi
 scripts/create-subscriptions.sh \
   --prefix demopool2605 \
   --claude \
-  --anthropic-org "Contoso" \
-  --anthropic-industry manufacturing \
-  --anthropic-country SG \
   --count 10 \
   --location eastus2 \
   --billing-scope "$BILLING_SCOPE" \
   --mgmt-group grp-demoai
 
+mv ./generated/subscriptions.csv ./generated/subscriptions-claude.csv
+
+# 7 个 gpt 订阅
+scripts/create-subscriptions.sh \
+  --prefix demopool2605 \
+  --gpt \
+  --count 7 \
+  --location eastus2 \
+  --billing-scope "$BILLING_SCOPE" \
+  --mgmt-group grp-demoai
+
+mv ./generated/subscriptions.csv ./generated/subscriptions-gpt.csv
+
 # 10 个 claude 端点
 scripts/deploy-models.sh \
-  --input ./generated/subscriptions.csv
+  --input ./generated/subscriptions-claude.csv
+
+mv ./generated/foundry-endpoints.csv ./generated/foundry-endpoints-claude.csv
 
 # 验证
-VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
+VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints-claude.csv
+
+# 7 个 claude 端点
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions-gpt.csv
+
+mv ./generated/foundry-endpoints.csv ./generated/foundry-endpoints-gpt.csv
+
+# 验证
+VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints-gpt.csv
 
 # 增量开通：新增模型后重新执行，已有资源自动复用、已部署模型自动跳过
 scripts/deploy-models.sh \
