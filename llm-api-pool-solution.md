@@ -291,11 +291,16 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
   - 支持正向选择模型类型（model_type, 用参数 `--claude`、`--gpt`、`--deepseek` 激活），指定多个时只有最后一个生效，确保一个订阅中只有一类模型；生效选项在 CSV 中占一列；
   - 订阅名规则为 `{prefix}-{claude|gpt|deepseek}-sub{N}`;
   - 所属管理组为可选参数；location 默认 eastus2；
+  - **幂等**：已存在的订阅（按名称匹配）自动跳过创建，支持重复执行以增量补充；
 - **[scripts/deploy-models.sh](scripts/deploy-models.sh)**：第二阶段，基于参数 CSV 在各订阅下创建 resource group 和 Foundry 资源并部署模型端点。
   - 基于 `create-subscriptions.sh` 的输出 CSV 读取订阅 ID、订阅名、prefix、模型类型（model_type）、location；
   - 资源组名称固定为 `rg-foundry`，foundry 实例名称为 `fdry-{prefix}-{model_type}-{4 位随机数}`；
   - 输出文件为 CSV 格式，包含全部订阅的全部模型端点、模型名和访问密钥；
+  - **幂等**：资源组已存在则复用；Foundry 实例按 `fdry-{prefix}-{model_type}-` 前缀匹配已有实例直接使用；模型端点已存在则打印状态并跳过。支持重复执行以增量开通新模型；
+  - **容错**：单个订阅部署失败不影响后续订阅处理，执行结束报告成功/失败统计；
+  - 执行前列出待处理订阅清单并要求确认（`--force` 跳过）；
 - **[scripts/delete-resources.sh](scripts/delete-resources.sh)**：清理脚本，删除订阅下的资源组 `rg-foundry` 并清除软删除状态，用于回归测试。
+  - 执行前列出待处理订阅清单并要求确认；单个订阅失败不影响后续处理；
 - **[scripts/test-endpoints.sh](scripts/test-endpoints.sh)**：端点连通性验证脚本，自动遍历创建结果清单并逐一测试模型可访问性。
 
 ### 7.1 两阶段部署流程
@@ -323,7 +328,7 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 
 | 模型族 | 可用模型 | 部署格式 | 版本 |
 | --- | --- | --- | --- |
-| Claude | claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5 | Anthropic | 1, 1, 20251001 |
+| Claude | claude-opus-4-8, claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5 | Anthropic | 1, 1, 1, 20251001 |
 | GPT | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano | OpenAI | 2026-04-24, 2026-03-05, 2026-03-17, 2026-03-17 |
 | DeepSeek | DeepSeek-V4-Pro, DeepSeek-V4-Flash | DeepSeek | 2026-04-23, 2026-04-23 |
 
@@ -346,9 +351,14 @@ scripts/create-subscriptions.sh \
   --mgmt-group grp-demoai
 
 # ==================== 第二阶段：部署模型 ====================
-# 仅部署 CSV 文件指定端点
+# 部署 CSV 文件指定端点
 scripts/deploy-models.sh \
   --input ./generated/subscriptions.csv
+
+# for test deploy, 100k tpm
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions.csv
+  --tpm 100000
 
 # ==================== 清理与回归 ====================
 # 删除所有资源（含软删除清除）
@@ -385,6 +395,7 @@ VERBOSE=true scripts/test-endpoints.sh \
 | --- | --- | --- |
 | `-i, --input` | 输入 CSV 文件 | `./generated/subscriptions.csv` |
 | `-t, --tpm` | 默认 TPM（可选，测试时指定低配额） | — |
+| `--force` | 跳过确认 | — |
 | `--dry-run` | 仅打印操作 | — |
 
 **delete-resources.sh**：
@@ -418,6 +429,8 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 6. Claude 部署使用 REST API（api-version `2025-10-01-preview`）以支持 `modelProviderData` 字段；GPT 和 DeepSeek 使用标准 `az cognitiveservices` CLI。
 7. 跨订阅 quota 是共享的（如 GPT GlobalStandard quota 按区域聚合），需确保总部署容量不超过租户级别配额限制。
 8. 当 Azure Policy 强制 `disableLocalAuth=true` 时，API Key 不可用。`deploy-models.sh` 会自动为当前用户分配 `Cognitive Services OpenAI User` 角色，端点测试通过 Azure AD Bearer Token 认证。`test-endpoints.sh` 自动识别 JWT token 并使用 `Authorization: Bearer` 头部。
+9. **所有脚本支持重复执行（幂等）**：`create-subscriptions.sh` 跳过已存在订阅；`deploy-models.sh` 复用已有资源组和 Foundry 实例，跳过已部署模型；适合增量开通新模型（如在现有订阅上新增 claude-opus-4-8）。
+10. 单个订阅的部署失败不会中断整批处理，脚本继续执行后续订阅并在结束时报告成功/失败统计。
 
 ### 7.7 实际命令举例
 
@@ -444,6 +457,10 @@ scripts/deploy-models.sh \
 
 # 验证
 VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
+
+# 增量开通：新增模型后重新执行，已有资源自动复用、已部署模型自动跳过
+scripts/deploy-models.sh \
+  --input ./generated/subscriptions.csv
 
 # 回归测试：删除后重建
 scripts/delete-resources.sh --input ./generated/subscriptions.csv --force

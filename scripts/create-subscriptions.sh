@@ -208,9 +208,30 @@ main() {
     printf "subscription_id,subscription_name,prefix,model_type,location,anthropic-org,anthropic-industry,anthropic-country\n" > "$csv_file"
   fi
 
+  local created=0
+  local skipped=0
+
   for index in $(seq 1 "$COUNT"); do
     local sub_name="${PREFIX}-${MODEL_TYPE}-sub${index}"
     log "--- Subscription $index/$COUNT: $sub_name ---"
+
+    # Check if subscription already exists (match by display name pattern)
+    if [[ "$DRY_RUN" != "true" ]]; then
+      local existing_sub_id
+      existing_sub_id="$(az account list --query "[?name=='${sub_name}'].id" -o tsv --only-show-errors 2>/dev/null || true)"
+      if [[ -n "$existing_sub_id" ]]; then
+        log "  Subscription already exists: $sub_name ($existing_sub_id), skipping creation"
+        # Still append to CSV if not already there
+        if ! grep -q "$existing_sub_id" "$csv_file" 2>/dev/null; then
+          printf "%s,%s,%s,%s,%s,%s,%s,%s\n" \
+            "$existing_sub_id" "$sub_name" "$PREFIX" "$MODEL_TYPE" "$LOCATION" \
+            "$ANTHROPIC_ORG" "$ANTHROPIC_INDUSTRY" "$ANTHROPIC_COUNTRY" \
+            >> "$csv_file"
+        fi
+        skipped=$((skipped + 1))
+        continue
+      fi
+    fi
 
     local sub_id
     sub_id="$(create_subscription_alias "$index")"
@@ -222,11 +243,12 @@ main() {
       "$sub_id" "$sub_name" "$PREFIX" "$MODEL_TYPE" "$LOCATION" \
       "$ANTHROPIC_ORG" "$ANTHROPIC_INDUSTRY" "$ANTHROPIC_COUNTRY" \
       >> "$csv_file"
+    created=$((created + 1))
   done
 
   log "=== Subscription creation complete ==="
   log "Parameter file: $csv_file"
-  log "Entries added: $COUNT subscriptions (model_type=$MODEL_TYPE)"
+  log "  Created: $created, Skipped (existing): $skipped, Total planned: $COUNT"
   log ""
   log "Next step: deploy models"
   log "  scripts/deploy-models.sh --input $csv_file"

@@ -65,11 +65,11 @@ main() {
   log "Force:      $FORCE"
   log "Purge:      $PURGE"
 
-  # Collect unique subscriptions
+  # Collect unique subscriptions (use fd 3 to avoid az consuming stdin)
   local -a sub_list=()
   local line_num=0
 
-  while IFS=',' read -r subscription_id subscription_name prefix model_type location _rest; do
+  while IFS=',' read -r subscription_id subscription_name prefix model_type location _rest <&3 || [[ -n "$subscription_id" ]]; do
     line_num=$((line_num + 1))
     if [[ "$line_num" -eq 1 ]]; then continue; fi
 
@@ -79,18 +79,18 @@ main() {
     if [[ -z "$subscription_id" ]]; then continue; fi
 
     sub_list+=("${subscription_id}|${subscription_name}")
-  done < "$INPUT_FILE"
+  done 3< "$INPUT_FILE"
 
   if [[ ${#sub_list[@]} -eq 0 ]]; then
     log "No subscriptions found in CSV."
     return 0
   fi
 
-  log "Subscriptions to clean (rg-foundry):"
+  log "Deletion plan: ${#sub_list[@]} subscription(s) to process (rg-foundry):"
   for entry in "${sub_list[@]}"; do
     local sub_id="${entry%%|*}"
     local sub_name="${entry##*|}"
-    log "  $sub_name ($sub_id)"
+    log "  - $sub_name ($sub_id)"
   done
 
   if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
@@ -100,7 +100,8 @@ main() {
     read -r
   fi
 
-  # Delete resource groups
+  # Delete resource groups — errors in one subscription don't stop others
+  local processed=0
   for entry in "${sub_list[@]}"; do
     local sub_id="${entry%%|*}"
     local sub_name="${entry##*|}"
@@ -111,19 +112,28 @@ main() {
     if [[ "$DRY_RUN" == "true" ]]; then
       echo "[DRY-RUN] az account set --subscription $sub_id" >&2
       echo "[DRY-RUN] az group delete --name $resource_group --yes" >&2
+      processed=$((processed + 1))
       continue
     fi
 
-    az account set --subscription "$sub_id" --only-show-errors
+    if ! az account set --subscription "$sub_id" --only-show-errors 2>/dev/null; then
+      log "  ERROR: Failed to set subscription, continuing with next..."
+      continue
+    fi
 
     # Check if resource group exists
     if ! az group show --name "$resource_group" --output none --only-show-errors 2>/dev/null; then
       log "  Resource group $resource_group does not exist, skipping"
+      processed=$((processed + 1))
       continue
     fi
 
     log "  Deleting resource group: $resource_group"
-    az group delete --name "$resource_group" --yes --no-wait --only-show-errors
+    az group delete --name "$resource_group" --yes --no-wait --only-show-errors || {
+      log "  ERROR: Failed to delete $resource_group in $sub_name, continuing..."
+      continue
+    }
+    processed=$((processed + 1))
   done
 
   # Wait for deletions
@@ -185,6 +195,7 @@ for acct in json.load(sys.stdin):
   fi
 
   log "=== Deletion complete ==="
+  log "  Processed: $processed of ${#sub_list[@]} subscription(s)"
 }
 
 main "$@"

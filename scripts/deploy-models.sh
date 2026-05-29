@@ -4,6 +4,7 @@ set -euo pipefail
 # deploy-models.sh — Phase 2: Deploy Foundry resources and model endpoints.
 # Reads subscriptions.csv (from create-subscriptions.sh) and deploys models
 # based on the model_type column in the CSV.
+# Idempotent: reuses existing resource groups, Foundry instances, and deployments.
 
 # ---------- Defaults ----------
 
@@ -11,18 +12,20 @@ INPUT_FILE="${INPUT_FILE:-./generated/subscriptions.csv}"
 OUT_DIR="${OUT_DIR:-./generated}"
 DRY_RUN="${DRY_RUN:-false}"
 TPM_OVERRIDE="${TPM_OVERRIDE:-}"
+FORCE="${FORCE:-false}"
 
 ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 
 # ---------- Model definitions ----------
 # Format: model_name|version (comma-separated per type)
 
-CLAUDE_MODELS="claude-opus-4-7|1,claude-sonnet-4-6|1,claude-haiku-4-5|20251001"
+CLAUDE_MODELS="claude-opus-4-8|1,claude-opus-4-7|1,claude-sonnet-4-6|1,claude-haiku-4-5|20251001"
 GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.4|2026-03-05,gpt-5.4-mini|2026-03-17,gpt-5.4-nano|2026-03-17"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 
 # Default TPM per model (used when --tpm not specified)
 declare -A DEFAULT_TPM=(
+  [claude-opus-4-8]=2000000
   [claude-opus-4-7]=2000000
   [claude-sonnet-4-6]=4000000
   [claude-haiku-4-5]=4000000
@@ -42,10 +45,12 @@ Usage: $(basename "$0") [OPTIONS]
 
 Deploy Foundry resources and model endpoints from a subscriptions CSV.
 Model type is determined from the CSV's model_type column.
+Idempotent: reuses existing resources and skips already-deployed models.
 
 Options:
   -i, --input FILE    Input CSV file (default: ./generated/subscriptions.csv)
   -t, --tpm TPM       Override TPM for all models (useful for testing with low quota)
+      --force         Skip confirmation prompt
       --dry-run       Print actions without executing
   -h, --help          Show this help
 
@@ -64,6 +69,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -i|--input)    INPUT_FILE="$2"; shift 2 ;;
     -t|--tpm)      TPM_OVERRIDE="$2"; shift 2 ;;
+    --force)       FORCE="true"; shift ;;
     --dry-run)     DRY_RUN="true"; shift ;;
     -h|--help)     usage ;;
     *)             echo "Unknown option: $1" >&2; usage ;;
@@ -132,7 +138,19 @@ register_providers() {
   done
 }
 
-# ---------- Foundry resource creation ----------
+# ---------- Foundry resource creation (idempotent) ----------
+
+find_existing_foundry() {
+  local resource_group="$1"
+  local prefix="$2"
+  local model_type="$3"
+
+  local pattern="fdry-${prefix}-${model_type}-"
+  az cognitiveservices account list \
+    --resource-group "$resource_group" \
+    --query "[?starts_with(name, '${pattern}')].name" \
+    -o tsv --only-show-errors 2>/dev/null | head -n 1
+}
 
 create_foundry_resource() {
   local subscription_id="$1"
@@ -141,21 +159,40 @@ create_foundry_resource() {
   local location="$4"
 
   local resource_group="rg-foundry"
-  local suffix
-  suffix="$(random_suffix)"
-  local account_name="fdry-${prefix}-${model_type}-${suffix}"
 
-  # Create resource group
-  log "  Creating resource group: $resource_group (location: $location)"
+  # Create or reuse resource group
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "[DRY-RUN] az group create --name $resource_group --location $location" >&2
   else
-    az group create \
-      --name "$resource_group" \
-      --location "$location" \
-      --tags workload=llm-api-pool prefix="$prefix" model_type="$model_type" \
-      --output none --only-show-errors
+    local rg_exists
+    rg_exists="$(az group exists --name "$resource_group" --only-show-errors 2>/dev/null || echo "false")"
+    if [[ "$rg_exists" == "true" ]]; then
+      log "  Resource group already exists: $resource_group"
+    else
+      log "  Creating resource group: $resource_group (location: $location)"
+      az group create \
+        --name "$resource_group" \
+        --location "$location" \
+        --tags workload=llm-api-pool prefix="$prefix" model_type="$model_type" \
+        --output none --only-show-errors
+    fi
   fi
+
+  # Check for existing Foundry matching fdry-{prefix}-{model_type}-*
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local existing_account
+    existing_account="$(find_existing_foundry "$resource_group" "$prefix" "$model_type")"
+    if [[ -n "$existing_account" ]]; then
+      log "  Reusing existing Foundry resource: $existing_account"
+      echo "$existing_account"
+      return 0
+    fi
+  fi
+
+  # Create new Foundry resource
+  local suffix
+  suffix="$(random_suffix)"
+  local account_name="fdry-${prefix}-${model_type}-${suffix}"
 
   # Purge soft-deleted resource if name collides
   if [[ "$DRY_RUN" != "true" ]]; then
@@ -172,7 +209,6 @@ create_foundry_resource() {
     fi
   fi
 
-  # Create Foundry (AIServices) resource
   log "  Creating Foundry resource: $account_name"
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "[DRY-RUN] az cognitiveservices account create --name $account_name --kind AIServices --sku S0" >&2
@@ -189,7 +225,6 @@ create_foundry_resource() {
   fi
 
   # Assign Cognitive Services OpenAI User role to deploying user.
-  # Required when Azure Policy enforces disableLocalAuth=true.
   if [[ "$DRY_RUN" != "true" ]]; then
     local user_id
     user_id="$(az ad signed-in-user show --query id -o tsv --only-show-errors 2>/dev/null || true)"
@@ -226,7 +261,6 @@ get_access_key() {
     echo "dry-run-key-placeholder"
     return 0
   fi
-  # Try key-based access first; if blocked (disableLocalAuth), get bearer token
   local key
   key="$(az cognitiveservices account keys list \
     --name "$account_name" \
@@ -237,6 +271,25 @@ get_access_key() {
   else
     az account get-access-token --resource https://cognitiveservices.azure.com \
       --query accessToken -o tsv --only-show-errors 2>/dev/null || echo ""
+  fi
+}
+
+# ---------- Deployment existence check ----------
+
+check_deployment_exists() {
+  local resource_group="$1"
+  local account_name="$2"
+  local deployment_name="$3"
+
+  local state
+  state="$(az cognitiveservices account deployment show \
+    --name "$account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$deployment_name" \
+    --query "properties.provisioningState" -o tsv --only-show-errors 2>/dev/null || true)"
+
+  if [[ -n "$state" ]]; then
+    echo "$state"
   fi
 }
 
@@ -255,6 +308,16 @@ deploy_claude_model() {
 
   local sku_capacity=$((tpm / 1000))
   local deployment_name="$model_name"
+
+  # Check if deployment already exists
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local existing_state
+    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    if [[ -n "$existing_state" ]]; then
+      log "  $deployment_name: already exists (state=$existing_state), skipping"
+      return 0
+    fi
+  fi
 
   log "  Deploying Claude: $deployment_name (version=$model_version, capacity=$sku_capacity)"
 
@@ -291,7 +354,6 @@ JSON
     return 0
   }
 
-  # Wait for async deployment
   log "  Waiting for $deployment_name..."
   local state=""
   for _ in $(seq 1 30); do
@@ -319,6 +381,16 @@ deploy_openai_model() {
 
   local sku_capacity=$((tpm / 1000))
   local deployment_name="${model_name}"
+
+  # Check if deployment already exists
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local existing_state
+    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    if [[ -n "$existing_state" ]]; then
+      log "  $deployment_name: already exists (state=$existing_state), skipping"
+      return 0
+    fi
+  fi
 
   log "  Deploying GPT: $deployment_name (version=$model_version, capacity=$sku_capacity)"
 
@@ -351,6 +423,16 @@ deploy_deepseek_model() {
 
   local sku_capacity=$((tpm / 1000))
   local deployment_name="${model_name}"
+
+  # Check if deployment already exists
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local existing_state
+    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    if [[ -n "$existing_state" ]]; then
+      log "  $deployment_name: already exists (state=$existing_state), skipping"
+      return 0
+    fi
+  fi
 
   log "  Deploying DeepSeek: $deployment_name (version=$model_version, capacity=$sku_capacity)"
 
@@ -389,22 +471,14 @@ main() {
   log "Output dir:     $OUT_DIR"
   log "========================"
 
-  mkdir -p "$OUT_DIR"
-
-  local output_csv="${OUT_DIR}/foundry-endpoints.csv"
-  printf "model_endpoint,model_name,access_key\n" > "$output_csv"
-
+  # Pre-read CSV to collect subscriptions for confirmation
+  local -a sub_entries=()
   local line_num=0
 
-  # Use file descriptor 3 to avoid az commands consuming stdin from the while-read loop
-  while IFS=',' read -r subscription_id subscription_name prefix model_type location anthropic_org anthropic_industry anthropic_country <&3; do
+  while IFS=',' read -r subscription_id subscription_name prefix model_type location anthropic_org anthropic_industry anthropic_country || [[ -n "$subscription_id" ]]; do
     line_num=$((line_num + 1))
-    # Skip header
-    if [[ "$line_num" -eq 1 ]]; then
-      continue
-    fi
+    if [[ "$line_num" -eq 1 ]]; then continue; fi
 
-    # Trim whitespace
     subscription_id="$(echo "$subscription_id" | xargs)"
     subscription_name="$(echo "$subscription_name" | xargs)"
     prefix="$(echo "$prefix" | xargs)"
@@ -419,74 +493,118 @@ main() {
       continue
     fi
 
+    sub_entries+=("${subscription_id}|${subscription_name}|${prefix}|${model_type}|${location}|${anthropic_org}|${anthropic_industry}|${anthropic_country}")
+  done < "$INPUT_FILE"
+
+  if [[ ${#sub_entries[@]} -eq 0 ]]; then
+    log "No valid subscriptions found in CSV."
+    return 0
+  fi
+
+  # Display deployment plan and ask for confirmation
+  log "Deployment plan: ${#sub_entries[@]} subscription(s) to process:"
+  for entry in "${sub_entries[@]}"; do
+    IFS='|' read -r _sub_id sub_name _prefix m_type _rest <<< "$entry"
+    log "  - $sub_name (type=$m_type)"
+  done
+
+  if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
+    echo "" >&2
+    echo "Press Enter to continue, or Ctrl+C to abort..." >&2
+    read -r
+  fi
+
+  mkdir -p "$OUT_DIR"
+
+  local output_csv="${OUT_DIR}/foundry-endpoints.csv"
+  printf "model_endpoint,model_name,access_key\n" > "$output_csv"
+
+  local success_count=0
+  local fail_count=0
+
+  # Process each subscription — errors in one do not stop others
+  for entry in "${sub_entries[@]}"; do
+    IFS='|' read -r subscription_id subscription_name prefix model_type location anthropic_org anthropic_industry anthropic_country <<< "$entry"
+
     log "=== Processing: $subscription_name (sub=$subscription_id, type=$model_type) ==="
 
-    # Set subscription context
-    if [[ "$DRY_RUN" != "true" ]]; then
-      az account set --subscription "$subscription_id" --only-show-errors
-    else
-      echo "[DRY-RUN] az account set --subscription $subscription_id" >&2
-    fi
+    # Wrap per-subscription work so failures don't kill the loop
+    if ! (
+      set -euo pipefail
 
-    # Register providers
-    register_providers "$subscription_id"
+      # Set subscription context
+      if [[ "$DRY_RUN" != "true" ]]; then
+        az account set --subscription "$subscription_id" --only-show-errors
+      else
+        echo "[DRY-RUN] az account set --subscription $subscription_id" >&2
+      fi
 
-    # Create Foundry resource
-    local account_name
-    account_name="$(create_foundry_resource "$subscription_id" "$prefix" "$model_type" "$location")"
-    log "  Foundry resource: $account_name"
+      # Register providers
+      register_providers "$subscription_id"
 
-    local resource_group="rg-foundry"
-    local endpoint
-    endpoint="$(get_endpoint "$account_name" "$resource_group")"
+      # Create or reuse Foundry resource
+      local account_name
+      account_name="$(create_foundry_resource "$subscription_id" "$prefix" "$model_type" "$location")"
+      log "  Foundry resource: $account_name"
 
-    # Deploy models based on model_type
-    local models_list=""
-    case "$model_type" in
-      claude)   models_list="$CLAUDE_MODELS" ;;
-      gpt)      models_list="$GPT_MODELS" ;;
-      deepseek) models_list="$DEEPSEEK_MODELS" ;;
-      *)
-        log "WARNING: Unknown model_type '$model_type', skipping"
-        continue
-        ;;
-    esac
+      local resource_group="rg-foundry"
+      local endpoint
+      endpoint="$(get_endpoint "$account_name" "$resource_group")"
 
-    IFS=',' read -ra models <<< "$models_list"
-    for model_entry in "${models[@]}"; do
-      local m_name="${model_entry%%|*}"
-      local m_version="${model_entry##*|}"
-      local tpm
-      tpm="$(get_tpm "$m_name")"
-
+      # Deploy models based on model_type
+      local models_list=""
       case "$model_type" in
-        claude)
-          deploy_claude_model "$subscription_id" "$resource_group" "$account_name" \
-            "$m_name" "$m_version" "$tpm" "$anthropic_org" "$anthropic_industry" "$anthropic_country"
-          ;;
-        gpt)
-          deploy_openai_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
-          ;;
-        deepseek)
-          deploy_deepseek_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
+        claude)   models_list="$CLAUDE_MODELS" ;;
+        gpt)      models_list="$GPT_MODELS" ;;
+        deepseek) models_list="$DEEPSEEK_MODELS" ;;
+        *)
+          log "WARNING: Unknown model_type '$model_type', skipping"
+          exit 0
           ;;
       esac
 
-      # Write endpoint entry
-      printf "%s,%s,%s\n" \
-        "${endpoint%/}/openai/deployments/${m_name}" "$m_name" "$(get_access_key "$account_name" "$resource_group")" \
-        >> "$output_csv"
-    done
+      IFS=',' read -ra models <<< "$models_list"
+      for model_entry in "${models[@]}"; do
+        local m_name="${model_entry%%|*}"
+        local m_version="${model_entry##*|}"
+        local tpm
+        tpm="$(get_tpm "$m_name")"
 
-  done 3< "$INPUT_FILE"
+        case "$model_type" in
+          claude)
+            deploy_claude_model "$subscription_id" "$resource_group" "$account_name" \
+              "$m_name" "$m_version" "$tpm" "$anthropic_org" "$anthropic_industry" "$anthropic_country"
+            ;;
+          gpt)
+            deploy_openai_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
+            ;;
+          deepseek)
+            deploy_deepseek_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
+            ;;
+        esac
+
+        # Write endpoint entry
+        printf "%s,%s,%s\n" \
+          "${endpoint%/}/openai/deployments/${m_name}" "$m_name" "$(get_access_key "$account_name" "$resource_group")" \
+          >> "$output_csv"
+      done
+    ); then
+      log "  ERROR: Subscription $subscription_name had failures, continuing with next..."
+      fail_count=$((fail_count + 1))
+      continue
+    fi
+
+    success_count=$((success_count + 1))
+  done
 
   log "=== Deployment complete ==="
   log "Endpoint inventory: $output_csv"
   if [[ -f "$output_csv" ]]; then
     local count
     count="$(tail -n +2 "$output_csv" | wc -l)"
-    log "  $count model endpoints deployed"
+    log "  $count model endpoints recorded"
   fi
+  log "  Subscriptions: $success_count succeeded, $fail_count failed (of ${#sub_entries[@]} total)"
 }
 
 main "$@"
