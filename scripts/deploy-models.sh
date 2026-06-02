@@ -60,7 +60,7 @@ Input CSV format (from create-subscriptions.sh):
 
 Output:
   \$OUT_DIR/foundry-endpoints.csv — columns:
-    model_endpoint, model_name, access_key
+    subscription_name, model_endpoint, model_name, model_type, access_key
 EOF
   exit 1
 }
@@ -289,14 +289,37 @@ create_foundry_resource() {
 get_endpoint() {
   local account_name="$1"
   local resource_group="$2"
+  local model_type="$3"
+
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "https://${account_name}.cognitiveservices.azure.com/"
-  else
-    az cognitiveservices account show \
-      --name "$account_name" \
-      --resource-group "$resource_group" \
-      --query properties.endpoint -o tsv --only-show-errors
+    case "$model_type" in
+      claude|deepseek) echo "https://${account_name}.services.ai.azure.com/" ;;
+      gpt)            echo "https://${account_name}.openai.azure.com/" ;;
+      *)              echo "https://${account_name}.cognitiveservices.azure.com/" ;;
+    esac
+    return 0
   fi
+
+  case "$model_type" in
+    claude|deepseek)
+      az cognitiveservices account show \
+        --name "$account_name" \
+        --resource-group "$resource_group" \
+        --query 'properties.endpoints."AI Foundry API"' -o tsv --only-show-errors
+      ;;
+    gpt)
+      az cognitiveservices account show \
+        --name "$account_name" \
+        --resource-group "$resource_group" \
+        --query 'properties.endpoints."Azure OpenAI Legacy API - Latest moniker"' -o tsv --only-show-errors
+      ;;
+    *)
+      az cognitiveservices account show \
+        --name "$account_name" \
+        --resource-group "$resource_group" \
+        --query properties.endpoint -o tsv --only-show-errors
+      ;;
+  esac
 }
 
 get_access_key() {
@@ -568,7 +591,7 @@ main() {
   mkdir -p "$OUT_DIR"
 
   local output_csv="${OUT_DIR}/foundry-endpoints.csv"
-  printf "model_endpoint,model_name,access_key\n" > "$output_csv"
+  printf "subscription_name,model_endpoint,model_name,model_type,access_key\n" > "$output_csv"
 
   local success_count=0
   local fail_count=0
@@ -605,7 +628,7 @@ main() {
 
       local resource_group="rg-foundry"
       local endpoint
-      endpoint="$(get_endpoint "$account_name" "$resource_group")"
+      endpoint="$(get_endpoint "$account_name" "$resource_group" "$model_type")"
 
       # Deploy models based on model_type
       local models_list=""
@@ -643,9 +666,16 @@ main() {
             ;;
         esac
 
-        # Write endpoint entry
-        printf "%s,%s,%s\n" \
-          "${endpoint%/}/openai/deployments/${m_name}" "$m_name" "$access_key" \
+        # Write endpoint entry with model-type-appropriate path
+        local model_endpoint
+        case "$model_type" in
+          claude)   model_endpoint="${endpoint%/}/anthropic/v1/messages" ;;
+          gpt)      model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
+          deepseek) model_endpoint="${endpoint%/}/v1/chat/completions" ;;
+          *)        model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
+        esac
+        printf "%s,%s,%s,%s,%s\n" \
+          "$subscription_name" "$model_endpoint" "$m_name" "$model_type" "$access_key" \
           >> "$output_csv"
       done
     ); then

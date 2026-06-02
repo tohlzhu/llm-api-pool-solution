@@ -33,7 +33,7 @@ Environment variables:
   VERBOSE       Show full response body (default: false)
 
 Input CSV format (from deploy-models.sh):
-  model_endpoint, model_name, access_key
+  subscription_name, model_endpoint, model_name, model_type, access_key
 
 Examples:
   $(basename "$0")
@@ -102,15 +102,61 @@ get_auth_header() {
 
 # ---------- Test functions ----------
 
-test_openai_compatible() {
+test_claude() {
   local endpoint="$1"
   local model_name="$2"
   local api_key="$3"
 
-  local base_url="${endpoint%/}"
-  # For OpenAI-compatible endpoints, the endpoint already includes /openai/deployments/model_name
-  # We need to use the chat completions path
-  local url="${base_url}/chat/completions?api-version=2024-12-01-preview"
+  local url="${endpoint%/}"
+
+  local response
+  response="$(curl -s -w "\n%{http_code}" \
+    --max-time "$TIMEOUT" \
+    "$url" \
+    -H "x-api-key: ${api_key}" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"model\": \"${model_name}\",
+      \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
+      \"max_tokens\": ${MAX_TOKENS}
+    }" 2>/dev/null)" || {
+    echo "  FAIL: $model_name (connection error)"
+    return 1
+  }
+
+  local http_code
+  http_code="$(echo "$response" | tail -1)"
+  local body
+  body="$(echo "$response" | sed '$d')"
+
+  if [[ "$http_code" == "200" ]]; then
+    echo "  PASS: $model_name [Anthropic API] (HTTP $http_code)"
+    if [[ "$VERBOSE" == "true" ]]; then
+      echo "  Response: $body"
+    fi
+    return 0
+  elif echo "$body" | grep -q '"type":"invalid_request_error"'; then
+    echo "  PASS: $model_name [Anthropic API] (HTTP $http_code — upstream Anthropic responded)"
+    if [[ "$VERBOSE" == "true" ]]; then
+      echo "  Response: $body"
+    fi
+    return 0
+  else
+    echo "  FAIL: $model_name [Anthropic API] (HTTP $http_code)"
+    if [[ "$VERBOSE" == "true" ]]; then
+      echo "  Response: $body"
+    fi
+    return 1
+  fi
+}
+
+test_openai() {
+  local endpoint="$1"
+  local model_name="$2"
+  local api_key="$3"
+
+  local url="${endpoint%/}/chat/completions?api-version=2024-12-01-preview"
 
   local auth_header
   auth_header="$(get_auth_header "$api_key")"
@@ -125,7 +171,7 @@ test_openai_compatible() {
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_completion_tokens\": ${MAX_TOKENS}
     }" 2>/dev/null)" || {
-    echo "  FAIL: Connection error for $model_name"
+    echo "  FAIL: $model_name (connection error)"
     return 1
   }
 
@@ -135,13 +181,13 @@ test_openai_compatible() {
   body="$(echo "$response" | sed '$d')"
 
   if [[ "$http_code" == "200" ]]; then
-    echo "  PASS: $model_name (HTTP $http_code)"
+    echo "  PASS: $model_name [OpenAI API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
     return 0
   else
-    echo "  FAIL: $model_name (HTTP $http_code)"
+    echo "  FAIL: $model_name [OpenAI API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
@@ -149,16 +195,12 @@ test_openai_compatible() {
   fi
 }
 
-test_claude_native() {
+test_deepseek() {
   local endpoint="$1"
   local model_name="$2"
   local api_key="$3"
 
-  # Extract base URL from the full deployment endpoint path
-  # endpoint is like: https://fdry-xxx.cognitiveservices.azure.com/openai/deployments/claude-sonnet-4-6
-  local base_url
-  base_url="$(echo "$endpoint" | sed 's|/openai/deployments/.*||')"
-  local url="${base_url}/anthropic/v1/messages"
+  local url="${endpoint%/}"
 
   local auth_header
   auth_header="$(get_auth_header "$api_key")"
@@ -174,7 +216,7 @@ test_claude_native() {
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_tokens\": ${MAX_TOKENS}
     }" 2>/dev/null)" || {
-    echo "  FAIL: Connection error for $model_name [native Anthropic API]"
+    echo "  FAIL: $model_name (connection error)"
     return 1
   }
 
@@ -184,13 +226,13 @@ test_claude_native() {
   body="$(echo "$response" | sed '$d')"
 
   if [[ "$http_code" == "200" ]]; then
-    echo "  PASS: $model_name [native Anthropic API] (HTTP $http_code)"
+    echo "  PASS: $model_name [Model Inference API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
     return 0
   else
-    echo "  FAIL: $model_name [native Anthropic API] (HTTP $http_code)"
+    echo "  FAIL: $model_name [Model Inference API] (HTTP $http_code)"
     if [[ "$VERBOSE" == "true" ]]; then
       echo "  Response: $body"
     fi
@@ -209,19 +251,32 @@ main() {
   local failed=0
   local skipped=0
 
-  while IFS=',' read -r model_endpoint model_name access_key; do
+  while IFS=',' read -r subscription_name model_endpoint model_name model_type access_key; do
     # Skip header
-    if [[ "$model_endpoint" == "model_endpoint" ]]; then
+    if [[ "$subscription_name" == "subscription_name" ]]; then
       continue
     fi
 
     # Trim
+    subscription_name="$(echo "$subscription_name" | xargs)"
     model_endpoint="$(echo "$model_endpoint" | xargs)"
     model_name="$(echo "$model_name" | xargs)"
+    model_type="$(echo "$model_type" | xargs)"
     access_key="$(echo "$access_key" | xargs)"
 
+    # Infer model_type from model_name if not present
+    if [[ -z "$model_type" ]]; then
+      if is_claude_model "$model_name"; then
+        model_type="claude"
+      elif is_deepseek_model "$model_name"; then
+        model_type="deepseek"
+      else
+        model_type="gpt"
+      fi
+    fi
+
     total=$((total + 1))
-    echo "[$total] $model_name → $model_endpoint"
+    echo "[$total] $model_name ($model_type) → $model_endpoint [$subscription_name]"
 
     if [[ -z "$access_key" ]]; then
       echo "  SKIP: No access key available"
@@ -229,21 +284,36 @@ main() {
       continue
     fi
 
-    # Try OpenAI-compatible first
-    if test_openai_compatible "$model_endpoint" "$model_name" "$access_key"; then
-      passed=$((passed + 1))
-    else
-      # For Claude models, try native Anthropic API
-      if is_claude_model "$model_name"; then
-        if test_claude_native "$model_endpoint" "$model_name" "$access_key"; then
+    case "$model_type" in
+      claude)
+        if test_claude "$model_endpoint" "$model_name" "$access_key"; then
           passed=$((passed + 1))
         else
           failed=$((failed + 1))
         fi
-      else
-        failed=$((failed + 1))
-      fi
-    fi
+        ;;
+      gpt)
+        if test_openai "$model_endpoint" "$model_name" "$access_key"; then
+          passed=$((passed + 1))
+        else
+          failed=$((failed + 1))
+        fi
+        ;;
+      deepseek)
+        if test_deepseek "$model_endpoint" "$model_name" "$access_key"; then
+          passed=$((passed + 1))
+        else
+          failed=$((failed + 1))
+        fi
+        ;;
+      *)
+        if test_openai "$model_endpoint" "$model_name" "$access_key"; then
+          passed=$((passed + 1))
+        else
+          failed=$((failed + 1))
+        fi
+        ;;
+    esac
     echo ""
   done < "$INPUT_FILE"
 

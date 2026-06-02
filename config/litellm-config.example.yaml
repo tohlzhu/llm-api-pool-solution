@@ -1,5 +1,11 @@
 # LiteLLM production-oriented example for a multi-subscription Foundry + Vertex pool.
 #
+# Endpoint format per model type (from Azure AI Foundry properties.endpoints):
+#   Claude/DeepSeek api_base: https://<resource>.services.ai.azure.com/anthropic
+#     (LiteLLM auto-appends /v1/messages; provider prefix: azure_ai/)
+#   GPT api_base: https://<resource>.openai.azure.com/
+#     (LiteLLM constructs /openai/deployments/<name>/chat/completions; provider prefix: azure/)
+#
 # Naming convention per main document (section 6.1):
 #   claude-opus-4-7-grp{1..5}    — 10 Claude subscriptions split into 5 groups (2 per group)
 #   claude-sonnet-4-6-grp{1..5}  — same 10 subscriptions, Sonnet endpoints
