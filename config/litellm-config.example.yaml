@@ -317,7 +317,109 @@ model_list:
       base_model: claude-haiku-4-5
       isolation_group: 1
 
-  # Groups 2-5: replicate pattern for sub3..sub10 (omitted for brevity)
+  # Group 2: sub3 + sub4
+  - model_name: claude-haiku-4-5-grp2
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB03_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB03_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub03-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 2
+  - model_name: claude-haiku-4-5-grp2
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB04_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB04_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub04-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 2
+
+  # Group 3: sub5 + sub6
+  - model_name: claude-haiku-4-5-grp3
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB05_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB05_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub05-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 3
+  - model_name: claude-haiku-4-5-grp3
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB06_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB06_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub06-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 3
+
+  # Group 4: sub7 + sub8
+  - model_name: claude-haiku-4-5-grp4
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB07_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB07_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub07-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 4
+  - model_name: claude-haiku-4-5-grp4
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB08_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB08_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub08-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 4
+
+  # Group 5: sub9 + sub10
+  - model_name: claude-haiku-4-5-grp5
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB09_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB09_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub09-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 5
+  - model_name: claude-haiku-4-5-grp5
+    litellm_params:
+      model: azure_ai/claude-haiku-4-5
+      api_base: os.environ/AZURE_CLAUDE_SUB10_ENDPOINT
+      api_key: os.environ/AZURE_CLAUDE_SUB10_KEY
+      tpm: 3600000
+      rpm: 6000
+      max_parallel_requests: 180
+    model_info:
+      id: claude-sub10-haiku
+      base_model: claude-haiku-4-5
+      isolation_group: 5
 
   # ============================================================
   # GPT 5.5 — 5 isolated groups, 1 GPT endpoint per group

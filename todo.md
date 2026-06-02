@@ -9,9 +9,7 @@
 
 ## 更新要求
 
-1. `scripts/deploy-models.sh` 中大约第 340 行用 anthropic_org 给创建 claude 模型的参数 modelProviderData/organizationName 赋值，以及这里也填写了 industry 和 countryCode ，但是我在 azure portal 中没找到 anthropic_org 的赋值来源。请尝试用 az 命令，从当前环境的一个订阅中提取正确的 organizationName 和 countryCode 赋值；
-2. 如果上述操作能成功，修改 deploy-models.sh 代码，实现如果用户不在 csv 指定 anthropic 的这三个参数就提取当前操作的订阅的正确属性填充赋值（industry 用 Manufacturing ），并打印告知用户实际赋值内容；
-3. 如果 1 的操作不成功，不要修改任何代码和文件，告知我即可。
+1. `config/litellm-config.example.yaml` 第 320 行写着 `# Groups 2-5: replicate pattern for sub3..sub10 (omitted for brevity)`，是 Claude Haiku 的配置没有完整列出，请根据上下文补充。
 
 ## 注意事项
 
