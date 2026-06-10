@@ -180,10 +180,35 @@ move_to_management_group() {
     echo "[DRY-RUN] az account management-group subscription add --name $MANAGEMENT_GROUP_ID --subscription $subscription_id" >&2
     return 0
   fi
+
+  # A newly created subscription is not immediately visible to the management
+  # group service even after the alias reports "Succeeded" — the move fails with
+  # "Subscription not found in the current context." until the subscription has
+  # propagated across ARM. Retry with backoff until it becomes movable.
   log "  Moving $subscription_id to management group $MANAGEMENT_GROUP_ID"
-  az account management-group subscription add \
-    --name "$MANAGEMENT_GROUP_ID" \
-    --subscription "$subscription_id" --only-show-errors
+
+  local err
+  for attempt in $(seq 1 30); do
+    if err="$(az account management-group subscription add \
+      --name "$MANAGEMENT_GROUP_ID" \
+      --subscription "$subscription_id" --only-show-errors 2>&1)"; then
+      return 0
+    fi
+
+    if [[ "$err" == *"not found in the current context"* ]]; then
+      log "    Subscription not yet visible (attempt $attempt/30), refreshing and retrying in 20s..."
+      az account list --refresh --only-show-errors >/dev/null 2>&1 || true
+      sleep 20
+      continue
+    fi
+
+    # Any other error is not a propagation delay — surface it immediately.
+    echo "ERROR: Failed to move $subscription_id to management group $MANAGEMENT_GROUP_ID: $err" >&2
+    return 1
+  done
+
+  echo "ERROR: Timed out waiting for $subscription_id to become movable to management group $MANAGEMENT_GROUP_ID" >&2
+  return 1
 }
 
 # ---------- Main ----------

@@ -4,14 +4,11 @@
 
 ## 环境说明
 
-1. 当前环境 azure cli 登录的 Azure 订阅 "ME-MngEnvMCAP236878-zhuhonglei-1" (isDefault: true) 和 "ME-MngEnvMCAP012397-zhuhonglei-1" 都有权限创建 foundry、foundry 下的任何端点，但是没有 Claude quota 可用，Claude 模型端点都会创建失败；gpt-5.4/DeepSeek-V4-Pro 模型都可以创建；
-2. 当前环境的 azure cli 所登录的 10 个订阅 `adai2605-claude-sub{1..10}` 用于开 Claude 模型，7 个订阅 `adai2605-gpt-sub{1..7}` 用于开 gpt 模型；
-3. 运行 `az account list` 可以查到订阅基本信息，目前所有 azure cli 下登录的账号都没有权限创建新订阅；
-4. 注意如果测试创建 foundry 下的模型，其端点参数 tpm 固定设置为 100k；
+1. 当前环境 azure cli 登录的 Azure 用户有权限创建新订阅，但这是生产账号，务必只进行读操作，所有写操作交给用户执行。
 
 ## 更新要求
 
-1. 我用 ` VERBOSE=true ./scripts/test-endpoints.sh ./generated/foundry-endpoints.csv` 得到以下输出，其中 claude-opus-4-8 的响应 "Access denied due to invalid subscription key or wrong API endpoint." 不符合预期，请基于环境说明中的例子重新调试脚本。
+1. 现在执行脚本报错，看起来是创建订阅后马上移动到管理组失败了，因为刚创建的订阅还不能访问，等一会儿能访问了再次执行移动就可以成功，请修复这个等待行为。
 
 ## 注意事项
 
