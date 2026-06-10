@@ -39,13 +39,21 @@ Options:
       --anthropic-country CC    Claude countryCode (default: SG)
   -n, --count N                 Number of subscriptions to create (default: 10)
   -l, --location LOCATION       Azure region (default: eastus2)
-  -s, --billing-scope SCOPE     EA/MCA billing scope (required)
+  -s, --billing-scope SCOPE     EA/MCA billing scope (required, see below)
   -m, --mgmt-group ID           Management group ID (optional)
       --dry-run                 Print actions without executing
   -h, --help                    Show this help
 
 At least one model type must be specified: --claude, --gpt, or --deepseek.
 If multiple are specified, the last one wins (one subscription batch = one model type).
+
+Billing scope format (full ARM resource ID):
+  EA:  /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/enrollmentAccounts/{enrollmentAccountId}
+       Find via: az billing enrollment-account list --query "[].id" -o tsv
+  MCA: /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/billingProfiles/{billingProfileId}/invoiceSections/{invoiceSectionId}
+       Find via: az billing invoice section list --billing-account-name <ID> --billing-profile-name <ID> --query "[].id" -o tsv
+  MPA: /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{customerId}
+  Portal: Cost Management + Billing -> Billing scopes / Invoice sections -> Properties -> ID
 
 Output:
   \$OUT_DIR/subscriptions.csv — columns:
