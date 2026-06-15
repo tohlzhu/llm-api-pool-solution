@@ -29,11 +29,13 @@
 
 1. 客户具备 EA/MCA 下自动创建 Azure subscription 的计费权限和服务主体授权。
 2. 客户计划创建 3 类 Azure 订阅，其中 A 类 10 个（用于 Claude Code 终端），B 类 7 个（5 个用于 codex 终端，2 个用于定时任务），C 类 1 个(用于通用场景)。A/B/C 类的描述如下： 
-  - A. Claude 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "claude-opus-4-7", model_name = "claude-sonnet-4-6", model_name = "claude-haiku-4-5" 的端点各 1 个，区域统一选择为 eastus2；
-  - B. GPT 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "gpt-5.5", model_name = "gpt-5.4", model_name = "gpt-5.4-mini", model_name = "gpt-5.4-nano" 的端点各 1 个，区域统一选择为 eastus2；
-  - C. DeepSeek 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "DeepSeek-V4-Pro", model_name = "DeepSeek-V4-Flash" 的端点各 1 个，区域统一选择为 eastus2；
+  - A. Claude 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "claude-opus-4-7", model_name = "claude-sonnet-4-6", model_name = "claude-haiku-4-5" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
+  - B. GPT 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "gpt-5.5", model_name = "gpt-5.4", model_name = "gpt-5.4-mini", model_name = "gpt-5.4-nano" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
+  - C. DeepSeek 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "DeepSeek-V4-Pro", model_name = "DeepSeek-V4-Flash" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
 3. Claude 模型在 Microsoft Foundry 中通过 Anthropic partner model / Marketplace 路径供应；GPT 模型通过 Azure OpenAI in Microsoft Foundry / Foundry Models sold directly by Azure 路径供应。
-4. 客户接受完整请求/响应日志记录，并将配套实施加密、最小权限、留存、审批、脱敏和访问审计控制。
+4. `GlobalStandard` 是模型 deployment type / SKU，表示推理可由 Azure 全球基础设施动态路由，并不表示创建 Foundry 资源时可以省略 Azure region；脚本中的 `--location` 仍用于资源组和 AIServices / Foundry 资源落地。
+5. 截至 2026-06，Microsoft Learn 对 2026-05 quota 管理更新的说明是：Realtime Translate 和 Realtime Whisper 已采用按订阅共享的 Global Standard / Data Zone Standard quota 池；本文涉及的 Claude、GPT、DeepSeek 等其他模型仍需按模型文档核验 region、deployment type、Marketplace、subscription quota 和租户条件。
+6. 客户接受完整请求/响应日志记录，并将配套实施加密、最小权限、留存、审批、脱敏和访问审计控制。
 
 | 模型族 | 单订阅 TPM | 订阅汇总 TPM | 主要用途 |
 | --- | ---: | ---: | --- |
@@ -318,8 +320,8 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 基于参数 CSV 文件，在每个订阅中执行：
 
 1. 注册必要 resource provider（CognitiveServices、SaaS、MarketplaceOrdering 等）。
-2. 创建资源组和 AI Foundry（Cognitive Services AIServices）资源。
-3. 按 model_type 部署对应类型的模型端点。(从 CSV 获取 anthropic 有关参数)
+2. 创建资源组和 AI Foundry（Cognitive Services AIServices）资源；CSV 中的 `location` 作用于这些 Azure 资源。
+3. 按 model_type 部署对应类型的模型端点，当前脚本固定使用 `GlobalStandard` deployment SKU（从 CSV 获取 anthropic 有关参数）。
 4. Claude 模型通过 REST API（api-version `2025-10-01-preview`）部署，包含 `modelProviderData`（organizationName、industry、countryCode，取自 CSV 的 anthropic-org, anthropic-industry, anthropic-country）。
 5. GPT 和 DeepSeek 模型通过 `az cognitiveservices account deployment create` 部署。
 6. 输出端点、模型名称、访问密钥清单 CSV `./generated/foundry-endpoints.csv`，包含字段 `model_endpoint, model_name, access_key`。
@@ -422,12 +424,12 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 ### 7.6 注意事项
 
 1. 使用 `--dry-run` 模式确认脚本将执行的操作。
-2. 在测试订阅中验证 Anthropic Claude 模型的 Marketplace 条款接受、区域可用性和部署 API 兼容性。
+2. 在测试订阅中验证 Anthropic Claude 模型的 Marketplace 条款接受、区域可用性、deployment type 支持和部署 API 兼容性。
 3. 确认 billing scope 格式、服务主体权限和订阅配额限制。
 4. 部署完成后使用 `test-endpoints.sh` 验证所有端点的连通性和模型可访问性。
 5. Foundry 资源删除后有 48 小时软删除窗口期，`delete-resources.sh` 默认执行清除以支持立即重建。
 6. Claude 部署使用 REST API（api-version `2025-10-01-preview`）以支持 `modelProviderData` 字段；GPT 和 DeepSeek 使用标准 `az cognitiveservices` CLI。
-7. 跨订阅 quota 是共享的（如 GPT GlobalStandard quota 按区域聚合），需确保总部署容量不超过租户级别配额限制。
+7. 不要假设所有模型的 quota 都已跨 region 或跨订阅共享。Microsoft Learn 当前说明：Realtime Translate / Realtime Whisper 已采用按订阅共享的 Global Standard / Data Zone Standard quota 池；其他 Foundry Models 通常仍按 subscription、region、model 或 deployment type 管理，需逐模型核验配额页和模型可用性页。
 8. 当 Azure Policy 强制 `disableLocalAuth=true` 时，API Key 不可用。`deploy-models.sh` 会自动为当前用户分配 `Cognitive Services OpenAI User` 角色，端点测试通过 Azure AD Bearer Token 认证。`test-endpoints.sh` 自动识别 JWT token 并使用 `Authorization: Bearer` 头部。
 9. **所有脚本支持重复执行（幂等）**：`create-subscriptions.sh` 跳过已存在订阅；`deploy-models.sh` 复用已有资源组和 Foundry 实例，跳过已部署模型；适合增量开通新模型（如在现有订阅上新增 claude-opus-4-8）。
 10. 单个订阅的部署失败不会中断整批处理，脚本继续执行后续订阅并在结束时报告成功/失败统计。
