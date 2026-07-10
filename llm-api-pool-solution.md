@@ -29,12 +29,12 @@
 
 1. 客户具备 EA/MCA 下自动创建 Azure subscription 的计费权限和服务主体授权。
 2. 客户计划创建 3 类 Azure 订阅，其中 A 类 10 个（用于 Claude Code 终端），B 类 7 个（5 个用于 codex 终端，2 个用于定时任务），C 类 1 个(用于通用场景)。A/B/C 类的描述如下： 
-  - A. Claude 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "claude-opus-4-7", model_name = "claude-sonnet-4-6", model_name = "claude-haiku-4-5" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
-  - B. GPT 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "gpt-5.5", model_name = "gpt-5.4", model_name = "gpt-5.4-mini", model_name = "gpt-5.4-nano" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
+  - A. Claude 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "claude-opus-4-8", model_name = "claude-sonnet-5", model_name = "claude-haiku-4-5" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
+  - B. GPT 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "gpt-5.5", model_name = "gpt-5.6-terra", model_name = "gpt-5.6-sol", model_name = "gpt-5.6-luna" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
   - C. DeepSeek 订阅，订阅名约定为 {prefix}-sub{N}，每订阅中 1 个 foundry 实例，foundry 实例中 model_name = "DeepSeek-V4-Pro", model_name = "DeepSeek-V4-Flash" 的端点各 1 个，Foundry 资源区域统一选择 eastus2，模型部署 SKU 使用 `GlobalStandard`；
 3. Claude 模型在 Microsoft Foundry 中通过 Anthropic partner model / Marketplace 路径供应；GPT 模型通过 Azure OpenAI in Microsoft Foundry / Foundry Models sold directly by Azure 路径供应。
 4. `GlobalStandard` 是模型 deployment type / SKU，表示推理可由 Azure 全球基础设施动态路由，并不表示创建 Foundry 资源时可以省略 Azure region；脚本中的 `--location` 仍用于资源组和 AIServices / Foundry 资源落地。
-5. 截至 2026-06，Microsoft Learn 对 2026-05 quota 管理更新的说明是：Realtime Translate 和 Realtime Whisper 已采用按订阅共享的 Global Standard / Data Zone Standard quota 池；本文涉及的 Claude、GPT、DeepSeek 等其他模型仍需按模型文档核验 region、deployment type、Marketplace、subscription quota 和租户条件。
+5. 截至 2026-07，Microsoft Learn 对 quota 管理的说明是：Realtime Translate 和 Realtime Whisper 已采用按订阅共享的 Global Standard / Data Zone Standard quota 池；本文涉及的 Claude、GPT、DeepSeek 等其他模型仍需按模型文档核验 region、deployment type、Marketplace、subscription quota 和租户条件。GPT-5.6 系列为 Preview 且按客户逐步开放，不能作为未经租户、区域和配额验证的生产默认承诺。
 6. 客户接受完整请求/响应日志记录，并将配套实施加密、最小权限、留存、审批、脱敏和访问审计控制。
 
 | 模型族 | 单订阅 TPM | 订阅汇总 TPM | 主要用途 |
@@ -43,16 +43,17 @@
 | Claude Sonnet | 4,000,000 | 40,000,000 | 主力编码、日常开发、文档与分析 |
 | Claude Haiku | 4,000,000 | 40,000,000 | 低延迟、高频轻量任务 |
 | GPT 5.5 | 10,000,000 | 70,000,000 | 通用问答、推理、工具调用、多模态和 Claude 备用 |
-| GPT 5.4 mini | 10,000,000 | 70,000,000 | 低延迟、高频推理和代码辅助 |
-| GPT 5.4 nano | 10,000,000 | 70,000,000 | 低延迟、高频推理 |
+| GPT-5.6 Sol | 10,000,000 | 70,000,000 | 高复杂度推理、长任务代理和关键编码任务 |
+| GPT-5.6 Terra | 10,000,000 | 70,000,000 | 平衡质量、成本和延迟的通用生产任务 |
+| GPT-5.6 Luna | 10,000,000 | 70,000,000 | 高并发、低成本的抽取、摘要和定时任务 |
 | DeepSeek V4 Pro | 10,000,000 | 10,000,000 | 高质量推理、数学、代码和中文任务 |
 | DeepSeek V4 Flash | 10,000,000 | 10,000,000 | 低延迟、高频推理和代码辅助 |
 
 在 litellm 层面，（假设有 5 个开发 team）
 
-1. 将 10 个 A 类订阅/端点分配给 5 组 model_name (claude-opus-4-7-grp{1..5}, claude-sonnet-4-6-grp{1..5}, claude-haiku-4-5-grp{1..5})，分别交付给 5 个开发 team 使用，这样 1 个 team 的异常行为只会 block 掉自己所用的 model_name 后的大模型端点，避免事故扩散；
-2. 将 5 个 B 类订阅/端点（由于 B 类端点容量较大，达到 10M tpm）分配给 5 组 model_name (gpt-5.5-grp{1..5}, gpt-5.4-grp{1..5}, gpt-5.4-mini-grp{1..5}, gpt-5.4-nano-grp{1..5})，分别交付给 5 个开发 team 使用；
-3. 将 2 个 B 类订阅/端点分配给 2 组 model_name (batch-gpt-5.5-grp{1..2}, batch-gpt-5.4-grp{1..2}, batch-gpt-5.4-mini-grp{1..2}, batch-gpt-5.4-nano-grp{1..2})，供开发 team 在定时任务类负载中使用；
+1. 将 10 个 A 类订阅/端点分配给 5 组 model_name (claude-opus-4-8-grp{1..5}, claude-sonnet-5-grp{1..5}, claude-haiku-4-5-grp{1..5})，分别交付给 5 个开发 team 使用，这样 1 个 team 的异常行为只会 block 掉自己所用的 model_name 后的大模型端点，避免事故扩散；
+2. 将 5 个 B 类订阅/端点（由于 B 类端点容量较大，达到 10M tpm）分配给 5 组 model_name (gpt-5.5-grp{1..5}, gpt-5.6-terra-grp{1..5}, gpt-5.6-sol-grp{1..5}, gpt-5.6-luna-grp{1..5})，分别交付给 5 个开发 team 使用；
+3. 将 2 个 B 类订阅/端点分配给 2 组 model_name (batch-gpt-5.5-grp{1..2}, batch-gpt-5.6-terra-grp{1..2}, batch-gpt-5.6-sol-grp{1..2}, batch-gpt-5.6-luna-grp{1..2})，供开发 team 在定时任务类负载中使用；
 4. 将 1 个 C 类订阅/端点分配给 1 组 model_name (DeepSeek-V4-Pro-grp1, DeepSeek-V4-Flash-grp1)，供开发 team 公用；
 
 面向 1000 名员工时，建议将总容量按用户分组、团队预算、业务优先级和模型成本做二次切分。LiteLLM 中的 virtual key、team budget、per-model TPM/RPM、max parallel requests 和审计日志，是把总容量变成可运营服务的关键控制面。
@@ -69,6 +70,7 @@
 2. 每个端点在 LiteLLM 中作为独立 deployment 注册，设置明确的 `tpm`、`rpm`、`max_parallel_requests` 和健康状态。
 3. 使用 Azure Key Vault 保存端点密钥，避免在 LiteLLM 配置中直接写入 secret。
 4. 对 Foundry 资源、模型端点、Key Vault、AKS、Redis、PostgreSQL、日志存储配置统一标签，便于成本、审计和责任归属。
+5. 每个 Foundry account 必须启用 project management，并在部署端点前创建一个 Foundry project；项目是 Foundry portal 中管理端点、agents、evaluations 等资源的必需工作区。
 
 ### 4.2 第二层：多订阅 Claude 池化能力
 
@@ -97,11 +99,11 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 
 ```
 订阅分组:
-  Group 1: llmpool-sub01, llmpool-sub02  →  model_name: claude-sonnet-4-6-grp1
-  Group 2: llmpool-sub03, llmpool-sub04  →  model_name: claude-sonnet-4-6-grp2
-  Group 3: llmpool-sub05, llmpool-sub06  →  model_name: claude-sonnet-4-6-grp3
-  Group 4: llmpool-sub07, llmpool-sub08  →  model_name: claude-sonnet-4-6-grp4
-  Group 5: llmpool-sub09, llmpool-sub10  →  model_name: claude-sonnet-4-6-grp5
+  Group 1: llmpool-sub01, llmpool-sub02  →  model_name: claude-sonnet-5-grp1
+  Group 2: llmpool-sub03, llmpool-sub04  →  model_name: claude-sonnet-5-grp2
+  Group 3: llmpool-sub05, llmpool-sub06  →  model_name: claude-sonnet-5-grp3
+  Group 4: llmpool-sub07, llmpool-sub08  →  model_name: claude-sonnet-5-grp4
+  Group 5: llmpool-sub09, llmpool-sub10  →  model_name: claude-sonnet-5-grp5
 ```
 
 同理适用于所有模型。
@@ -109,14 +111,14 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 #### 用户分配策略
 
 1. 将 1000 名员工按团队、部门或随机分桶分配到 5 个组之一。
-2. 每个团队/用户的 virtual key 绑定对应组的 `model_name`（例如 team-A 使用 `claude-sonnet-4-6-grp1`，team-B 使用 `claude-sonnet-4-6-grp2`）。
+2. 每个团队/用户的 virtual key 绑定对应组的 `model_name`（例如 team-A 使用 `claude-sonnet-5-grp1`，team-B 使用 `claude-sonnet-5-grp2`）。
 3. 分配关系通过 LiteLLM 的 `team_settings` 中的 `models` 字段或 key-level `model_access` 控制。
 4. 用户无需关心底层分组，应用侧可通过配置或 header 路由到正确的 model_name。
 
 #### 容灾与降级
 
 1. 组内 2 个端点之间按常规 LiteLLM 路由做负载均衡和 failover。
-2. 当某组全部端点被封禁时，该组用户通过 `fallbacks` 首先降级到其他供应商的相同模型（如 `vertex-claude-opus-4-7-grp{N}`），次之降级到跨类型的模型（如 `gpt-5.5-grp{N}`），而不是自动切换到其他 Claude 组——避免"带病"流量扩散到健康组。
+2. 当某组全部端点被封禁时，该组用户通过 `fallbacks` 首先降级到其他供应商的相同模型（如 `vertex-claude-opus-4-8-grp{N}`），次之降级到跨类型的模型（如 `gpt-5.5-grp{N}`），而不是自动切换到其他 Claude 组——避免"带病"流量扩散到健康组。
 3. 管理员在确认问题源头并处置违规用户后，可手动将受影响组的用户临时迁移到其他组。
 
 #### 隔离效果
@@ -189,15 +191,15 @@ Developer Apps / Internal Tools / Agents
   v                                            v                   v
 Azure Foundry Claude Pool                Azure Foundry GPT Pool    Vertex Claude via Partner
 10 subscriptions                         5 subscriptions           Separate cloud/provider path
-Opus/Sonnet/Haiku                        GPT 5.4 / GPT 5.5         Claude Opus/Sonnet/Haiku
+Opus/Sonnet/Haiku                        GPT 5.5 / GPT-5.6         Claude Opus/Sonnet/Haiku
   |                                            |
   v                                            v
 model_name isolation:                        model_name isolation:
-  claude-opus-4-7-grp1: llmpool-sub01,02       gpt-5.5-grp1: llmpool-sub11
-  claude-opus-4-7-grp2: llmpool-sub03,04       gpt-5.5-grp2: llmpool-sub12
-  claude-opus-4-7-grp3: llmpool-sub05,06       gpt-5.5-grp3: llmpool-sub13
-  claude-opus-4-7-grp4: llmpool-sub07,08       gpt-5.5-grp4: llmpool-sub14
-  claude-opus-4-7-grp5: llmpool-sub09,10       gpt-5.5-grp5: llmpool-sub15
+  claude-opus-4-8-grp1: llmpool-sub01,02       gpt-5.5-grp1: llmpool-sub11
+  claude-opus-4-8-grp2: llmpool-sub03,04       gpt-5.5-grp2: llmpool-sub12
+  claude-opus-4-8-grp3: llmpool-sub05,06       gpt-5.5-grp3: llmpool-sub13
+  claude-opus-4-8-grp4: llmpool-sub07,08       gpt-5.5-grp4: llmpool-sub14
+  claude-opus-4-8-grp5: llmpool-sub09,10       gpt-5.5-grp5: llmpool-sub15
 
 Scheduled / batch workload pool:
 Internal Jobs --> LiteLLM batch-* groups --> Dedicated Foundry endpoints
@@ -220,24 +222,24 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 
 | LiteLLM 模型名 | 底层供应 | 说明 |
 | --- | --- | --- |
-| `claude-opus-4-7-grp{1..5}` | 每组 2 个 Foundry Claude Opus 端点 | 高复杂度任务，5 组隔离 |
-| `claude-sonnet-4-6-grp{1..5}` | 每组 2 个 Foundry Claude Sonnet 端点 | 默认 Claude 主力模型，5 组隔离 |
+| `claude-opus-4-8-grp{1..5}` | 每组 2 个 Foundry Claude Opus 端点 | 高复杂度任务，5 组隔离 |
+| `claude-sonnet-5-grp{1..5}` | 每组 2 个 Foundry Claude Sonnet 端点 | 默认 Claude 主力模型，5 组隔离 |
 | `claude-haiku-4-5-grp{1..5}` | 每组 2 个 Foundry Claude Haiku 端点 | 低延迟、高频轻量任务，5 组隔离 |
 | `gpt-5.5-grp{1..5}` | 每组 1 个 Foundry GPT 5.5 端点 | GPT 主力模型，5 组隔离 |
-| `gpt-5.4-grp{1..5}` | 每组 1 个 Foundry GPT 5.4 端点 | GPT 主力模型，5 组隔离 |
-| `gpt-5.4-mini-grp{1..5}` | 每组 1 个 Foundry GPT mini 端点 | 快速低成本任务，5 组隔离 |
-| `gpt-5.4-nano-grp{1..5}` | 每组 1 个 Foundry GPT nano 端点 | 快速低成本任务，5 组隔离 |
+| `gpt-5.6-terra-grp{1..5}` | 每组 1 个 Foundry GPT-5.6 Terra 端点 | 平衡质量、成本和延迟的通用生产模型，5 组隔离 |
+| `gpt-5.6-sol-grp{1..5}` | 每组 1 个 Foundry GPT-5.6 Sol 端点 | 高复杂度推理、代理和关键编码任务，5 组隔离 |
+| `gpt-5.6-luna-grp{1..5}` | 每组 1 个 Foundry GPT-5.6 Luna 端点 | 高并发、低成本任务，5 组隔离 |
 | `DeepSeek-V4-Pro-grp1` | 每组 1 个 Foundry DeepSeek-V4-Pro 端点 | 高质量推理与代码 |
 | `DeepSeek-V4-Flash-grp1` | 每组 1 个 Foundry DeepSeek-V4-Flash 端点 | 低延迟推理 |
 | `vertex-claude-opus` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
 | `vertex-claude-sonnet` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
 | `vertex-claude-haiku` | Vertex Claude via Partner | Claude 跨云备用（不分组） |
 | `batch-gpt-5.5-grp{1..2}` | 定时任务专用 Foundry GPT 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
-| `batch-gpt-5.4-grp{1..2}` | 定时任务专用 Foundry GPT 池 | 周期性任务首选 Claude 模型组（独立池已隔离） |
-| `batch-gpt-5.4-mini-grp{1..2}` | 定时任务专用 Foundry GPT mini 池 | 低成本、高频重复 prompt |
-| `batch-gpt-5.4-nano-grp{1..2}` | 定时任务专用 Foundry GPT nano 池 | 低成本、高频重复 prompt |
+| `batch-gpt-5.6-terra-grp{1..2}` | 定时任务专用 Foundry GPT-5.6 Terra 池 | 需要较高质量的周期性任务 |
+| `batch-gpt-5.6-sol-grp{1..2}` | 定时任务专用 Foundry GPT-5.6 Sol 池 | 高复杂度的计划任务，需单独审批成本 |
+| `batch-gpt-5.6-luna-grp{1..2}` | 定时任务专用 Foundry GPT-5.6 Luna 池 | 低成本、高频重复 prompt |
 
-用户分配到某一组号后，应用层使用对应的 `model_name`（如 `claude-sonnet-4-6-grp1`）发起请求。LiteLLM 的 team/key 配置限定每个用户只能访问其所属组的模型名。
+用户分配到某一组号后，应用层使用对应的 `model_name`（如 `claude-sonnet-5-grp1`）发起请求。LiteLLM 的 team/key 配置限定每个用户只能访问其所属组的模型名。
 
 ### 6.2 路由、限流与降级
 
@@ -248,7 +250,7 @@ Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit
 5. 对认证错误、权限错误、配额配置错误设置低重试或不重试，避免无效请求放大。
 6. 单独配置 `context_window_fallbacks` 和 `content_policy_fallbacks`，不要把所有错误都当作同一种故障。
 7. 定时任务必须使用 `batch-*` 模型组和独立 virtual key；生产网关应通过 key 权限、team model allowlist 或应用侧校验，阻止批处理任务调用交互式模型组。
-8. 各隔离组的 `fallbacks` 应优先降级到 Vertex Claude（同模型类型，如 `claude-sonnet-4-6-grp{N}` → `vertex-claude-sonnet`），再降级到 GPT（如 `gpt-5.4-mini-grp{N}`），绝不降级到同模型的其他组号——避免违规流量扩散到健康组。该顺序确保 fallback 后模型行为一致性。`content_policy_fallbacks` 同理。
+8. 各隔离组的 `fallbacks` 应优先降级到 Vertex Claude（同模型类型，如 `claude-sonnet-5-grp{N}` → `vertex-claude-sonnet`），再降级到 GPT（如 `gpt-5.6-sol-grp{N}`），绝不降级到同模型的其他组号——避免违规流量扩散到健康组。该顺序确保 fallback 后模型行为一致性。`content_policy_fallbacks` 同理。
 
 ### 6.3 日志与审计
 
@@ -276,7 +278,7 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 
 1. 使用 virtual keys 按团队、应用、部门分配模型权限和预算。
 2. 对高成本模型设置审批或白名单，例如 Claude Opus、GPT 5.5。
-3. 对 `gpt-5.4-mini`、`claude-haiku-4-5` 设置默认轻量任务入口。
+3. 对 `gpt-5.6-luna`、`claude-haiku-4-5` 设置默认轻量任务入口；仅对高复杂度场景开放 `gpt-5.6-sol`。
 4. 对 `batch-*` 模型组设置更低默认预算、独立成本中心和任务级标签，避免定时任务挤占交互式研发预算。
 5. 将 `spend logs` 与成本中心、项目 ID、应用 ID 关联，支持内部 showback/chargeback。
 6. 建立容量日报：TPM 峰值、RPM 峰值、429 次数、fallback 次数、端点冷却次数、平均延迟、用户活跃数、定时任务调用量和批处理失败率。
@@ -296,9 +298,9 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
   - **幂等**：已存在的订阅（按名称匹配）自动跳过创建，支持重复执行以增量补充；
 - **[scripts/deploy-models.sh](scripts/deploy-models.sh)**：第二阶段，基于参数 CSV 在各订阅下创建 resource group 和 Foundry 资源并部署模型端点。
   - 基于 `create-subscriptions.sh` 的输出 CSV 读取订阅 ID、订阅名、prefix、模型类型（model_type）、location；
-  - 资源组名称固定为 `rg-foundry`，foundry 实例名称为 `fdry-{prefix}-{model_type}-{4 位随机数}`；
+  - 资源组名称固定为 `rg-foundry`；在每个订阅只创建一个 Foundry account 的前提下，账户名固定为 `fdry-{subscription_name}`，项目名固定为 `proj-{subscription_name}`。例如 `adai2605-gpt-sub1` 对应 `fdry-adai2605-gpt-sub1` 和 `proj-adai2605-gpt-sub1`；
   - 输出文件为 CSV 格式，包含全部订阅的全部模型端点、模型名和访问密钥；
-  - **幂等**：资源组已存在则复用；Foundry 实例按 `fdry-{prefix}-{model_type}-` 前缀匹配已有实例直接使用；模型端点已存在则打印状态并跳过。支持重复执行以增量开通新模型；
+  - **幂等**：资源组、按订阅名确定的 Foundry account 和 Foundry project 已存在则复用；模型端点已存在则打印状态并跳过。账户未启用 project management 时脚本明确失败，避免在 portal 中得到不可管理的端点。支持重复执行以增量开通新模型；
   - **容错**：单个订阅部署失败不影响后续订阅处理，执行结束报告成功/失败统计；
   - 执行前列出待处理订阅清单并要求确认（`--force` 跳过）；
 - **[scripts/delete-resources.sh](scripts/delete-resources.sh)**：清理脚本，删除订阅下的资源组 `rg-foundry` 并清除软删除状态，用于回归测试。
@@ -320,18 +322,19 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 基于参数 CSV 文件，在每个订阅中执行：
 
 1. 注册必要 resource provider（CognitiveServices、SaaS、MarketplaceOrdering 等）。
-2. 创建资源组和 AI Foundry（Cognitive Services AIServices）资源；CSV 中的 `location` 作用于这些 Azure 资源。
-3. 按 model_type 部署对应类型的模型端点，当前脚本固定使用 `GlobalStandard` deployment SKU（从 CSV 获取 anthropic 有关参数）。
-4. Claude 模型通过 REST API（api-version `2025-10-01-preview`）部署，包含 `modelProviderData`（organizationName、industry、countryCode，取自 CSV 的 anthropic-org, anthropic-industry, anthropic-country）。
-5. GPT 和 DeepSeek 模型通过 `az cognitiveservices account deployment create` 部署。
-6. 输出端点、模型名称、访问密钥清单 CSV `./generated/foundry-endpoints.csv`，包含字段 `model_endpoint, model_name, access_key`。
+2. 创建资源组和启用 project management 的 AI Foundry（Cognitive Services AIServices）account；账户和其 custom domain 均使用 `fdry-{subscription_name}`，CSV 中的 `location` 作用于这些 Azure 资源。
+3. 在模型部署前使用 `az cognitiveservices account project create` 创建或复用 `proj-{subscription_name}`；若已有 account 未启用 project management，停止该订阅的部署并提示重建，不能静默绕过。
+4. 按 model_type 部署对应类型的模型端点，当前脚本固定使用 `GlobalStandard` deployment SKU（从 CSV 获取 anthropic 有关参数）。
+5. Claude 模型通过 REST API（api-version `2025-10-01-preview`）部署，包含 `modelProviderData`（organizationName、industry、countryCode，取自 CSV 的 anthropic-org, anthropic-industry, anthropic-country）。
+6. GPT 和 DeepSeek 模型通过 `az cognitiveservices account deployment create` 部署。
+7. 输出端点、模型名称、访问密钥清单 CSV `./generated/foundry-endpoints.csv`，包含字段 `model_endpoint, model_name, access_key`。
 
 ### 7.2 支持的模型
 
 | 模型族 | 可用模型 | 部署格式 | 版本 |
 | --- | --- | --- | --- |
-| Claude | claude-opus-4-8, claude-opus-4-7, claude-sonnet-4-6, claude-haiku-4-5 | Anthropic | 1, 1, 1, 20251001 |
-| GPT | gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano | OpenAI | 2026-04-24, 2026-03-05, 2026-03-17, 2026-03-17 |
+| Claude | claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5 | Anthropic | 1, 1, 20251001 |
+| GPT | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol, gpt-5.6-luna | OpenAI | 2026-04-24, 2026-07-09, 2026-07-09, 2026-07-09 |
 | DeepSeek | DeepSeek-V4-Pro, DeepSeek-V4-Flash | DeepSeek | 2026-04-23, 2026-04-23 |
 
 ### 7.3 命令行用法
@@ -431,8 +434,9 @@ VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 6. Claude 部署使用 REST API（api-version `2025-10-01-preview`）以支持 `modelProviderData` 字段；GPT 和 DeepSeek 使用标准 `az cognitiveservices` CLI。
 7. 不要假设所有模型的 quota 都已跨 region 或跨订阅共享。Microsoft Learn 当前说明：Realtime Translate / Realtime Whisper 已采用按订阅共享的 Global Standard / Data Zone Standard quota 池；其他 Foundry Models 通常仍按 subscription、region、model 或 deployment type 管理，需逐模型核验配额页和模型可用性页。
 8. 当 Azure Policy 强制 `disableLocalAuth=true` 时，API Key 不可用。`deploy-models.sh` 会自动为当前用户分配 `Cognitive Services OpenAI User` 角色，端点测试通过 Azure AD Bearer Token 认证。`test-endpoints.sh` 自动识别 JWT token 并使用 `Authorization: Bearer` 头部。
-9. **所有脚本支持重复执行（幂等）**：`create-subscriptions.sh` 跳过已存在订阅；`deploy-models.sh` 复用已有资源组和 Foundry 实例，跳过已部署模型；适合增量开通新模型（如在现有订阅上新增 claude-opus-4-8）。
+9. **所有脚本支持重复执行（幂等）**：`create-subscriptions.sh` 跳过已存在订阅；`deploy-models.sh` 复用已有资源组、按订阅名确定的 Foundry account/project，并跳过已部署模型；适合增量开通新模型。
 10. 单个订阅的部署失败不会中断整批处理，脚本继续执行后续订阅并在结束时报告成功/失败统计。
+11. GPT-5.6 Sol、Terra、Luna 均为 Preview。部署前须在目标订阅验证 phased rollout 准入、模型/区域可用性、配额和 API 版本；生产变更须遵循 Preview 生命周期和回滚策略。
 
 ### 7.7 实际命令举例
 
@@ -558,7 +562,7 @@ GitHub Copilot 相关的完整内容（Copilot 桥接 Claude Code、请求审计
 
 交付前建议再次核验以下官方来源，因为模型、区域、quota tier 和 MCP 能力更新较快：
 
-1. Microsoft Learn：Microsoft Foundry、Foundry Models sold directly by Azure、Azure OpenAI GPT 5.4/5.5、Foundry Models from partners and community、Anthropic partner model、Foundry project 创建文档。
+1. Microsoft Learn：Microsoft Foundry、Foundry Models sold directly by Azure（含 GPT-5.6 series）、Foundry Models from partners and community、Anthropic partner model、Foundry project 创建文档。
 2. Microsoft Learn：EA/MCA programmatic subscription creation、Subscription Alias API、Azure billing scope、Marketplace/SaaS 权限文档。
 3. LiteLLM Docs [litellm doc](https://docs.litellm.ai/docs/)：routing、proxy config、fallbacks/reliability、logging、OpenTelemetry、Azure Sentinel、Redis router state、virtual keys。
 4. Google Cloud Docs：Vertex AI / Gemini Enterprise Agent Platform Claude partner models、Claude model cards、request/response logging。

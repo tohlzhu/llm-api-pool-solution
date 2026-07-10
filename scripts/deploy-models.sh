@@ -4,7 +4,7 @@ set -euo pipefail
 # deploy-models.sh — Phase 2: Deploy Foundry resources and model endpoints.
 # Reads subscriptions.csv (from create-subscriptions.sh) and deploys models
 # based on the model_type column in the CSV.
-# Idempotent: reuses existing resource groups, Foundry instances, and deployments.
+# Idempotent: reuses existing resource groups, Foundry accounts, projects, and deployments.
 
 # ---------- Defaults ----------
 
@@ -19,20 +19,19 @@ ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 # ---------- Model definitions ----------
 # Format: model_name|version (comma-separated per type)
 
-CLAUDE_MODELS="claude-opus-4-8|1,claude-opus-4-7|1,claude-sonnet-4-6|1,claude-haiku-4-5|20251001"
-GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.4|2026-03-05,gpt-5.4-mini|2026-03-17,gpt-5.4-nano|2026-03-17"
+CLAUDE_MODELS="claude-opus-4-8|1,claude-sonnet-5|1,claude-haiku-4-5|20251001"
+GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.6-terra|2026-07-09,gpt-5.6-sol|2026-07-09,gpt-5.6-luna|2026-07-09"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 
 # Default TPM per model (used when --tpm not specified)
 declare -A DEFAULT_TPM=(
   [claude-opus-4-8]=2000000
-  [claude-opus-4-7]=2000000
-  [claude-sonnet-4-6]=4000000
+  [claude-sonnet-5]=4000000
   [claude-haiku-4-5]=4000000
   [gpt-5.5]=10000000
-  [gpt-5.4]=10000000
-  [gpt-5.4-mini]=10000000
-  [gpt-5.4-nano]=10000000
+  [gpt-5.6-terra]=10000000
+  [gpt-5.6-sol]=10000000
+  [gpt-5.6-luna]=10000000
   [DeepSeek-V4-Pro]=10000000
   [DeepSeek-V4-Flash]=10000000
 )
@@ -141,10 +140,6 @@ log() {
   echo "[$(date '+%H:%M:%S')] $*" >&2
 }
 
-random_suffix() {
-  printf "%04d" $((RANDOM % 10000))
-}
-
 get_tpm() {
   local model_name="$1"
   if [[ -n "$TPM_OVERRIDE" ]]; then
@@ -183,27 +178,17 @@ register_providers() {
   done
 }
 
-# ---------- Foundry resource creation (idempotent) ----------
-
-find_existing_foundry() {
-  local resource_group="$1"
-  local prefix="$2"
-  local model_type="$3"
-
-  local pattern="fdry-${prefix}-${model_type}-"
-  az cognitiveservices account list \
-    --resource-group "$resource_group" \
-    --query "[?starts_with(name, '${pattern}')].name" \
-    -o tsv --only-show-errors 2>/dev/null | head -n 1
-}
+# ---------- Foundry account and project creation (idempotent) ----------
 
 create_foundry_resource() {
   local subscription_id="$1"
-  local prefix="$2"
-  local model_type="$3"
-  local location="$4"
+  local subscription_name="$2"
+  local prefix="$3"
+  local model_type="$4"
+  local location="$5"
 
   local resource_group="rg-foundry"
+  local account_name="fdry-${subscription_name}"
 
   # Create or reuse resource group
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -223,21 +208,25 @@ create_foundry_resource() {
     fi
   fi
 
-  # Check for existing Foundry matching fdry-{prefix}-{model_type}-*
   if [[ "$DRY_RUN" != "true" ]]; then
-    local existing_account
-    existing_account="$(find_existing_foundry "$resource_group" "$prefix" "$model_type")"
-    if [[ -n "$existing_account" ]]; then
-      log "  Reusing existing Foundry resource: $existing_account"
-      echo "$existing_account"
+    if az cognitiveservices account show \
+      --name "$account_name" \
+      --resource-group "$resource_group" \
+      --output none --only-show-errors 2>/dev/null; then
+      local project_management_enabled
+      project_management_enabled="$(az cognitiveservices account show \
+        --name "$account_name" \
+        --resource-group "$resource_group" \
+        --query 'properties.allowProjectManagement' -o tsv --only-show-errors)"
+      if [[ "$project_management_enabled" != "true" ]]; then
+        echo "ERROR: Foundry resource $account_name does not have project management enabled and cannot host a Foundry project. Recreate it with --allow-project-management true." >&2
+        return 1
+      fi
+      log "  Reusing existing Foundry resource: $account_name"
+      echo "$account_name"
       return 0
     fi
   fi
-
-  # Create new Foundry resource
-  local suffix
-  suffix="$(random_suffix)"
-  local account_name="fdry-${prefix}-${model_type}-${suffix}"
 
   # Purge soft-deleted resource if name collides
   if [[ "$DRY_RUN" != "true" ]]; then
@@ -256,7 +245,7 @@ create_foundry_resource() {
 
   log "  Creating Foundry resource: $account_name"
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az cognitiveservices account create --name $account_name --kind AIServices --sku S0" >&2
+    echo "[DRY-RUN] az cognitiveservices account create --name $account_name --kind AIServices --sku S0 --allow-project-management true" >&2
   else
     az cognitiveservices account create \
       --name "$account_name" \
@@ -265,6 +254,8 @@ create_foundry_resource() {
       --kind AIServices \
       --sku S0 \
       --custom-domain "$account_name" \
+      --allow-project-management true \
+      --assign-identity \
       --tags workload=llm-api-pool prefix="$prefix" model_type="$model_type" \
       --output none --only-show-errors
   fi
@@ -284,6 +275,37 @@ create_foundry_resource() {
   fi
 
   echo "$account_name"
+}
+
+create_foundry_project() {
+  local account_name="$1"
+  local subscription_name="$2"
+  local resource_group="$3"
+  local location="$4"
+  local project_name="proj-${subscription_name}"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY-RUN] az cognitiveservices account project create --name $account_name --project-name $project_name --location $location" >&2
+    return 0
+  fi
+
+  if az cognitiveservices account project show \
+    --name "$account_name" \
+    --resource-group "$resource_group" \
+    --project-name "$project_name" \
+    --output none --only-show-errors 2>/dev/null; then
+    log "  Reusing existing Foundry project: $project_name"
+    return 0
+  fi
+
+  log "  Creating Foundry project: $project_name"
+  az cognitiveservices account project create \
+    --name "$account_name" \
+    --resource-group "$resource_group" \
+    --project-name "$project_name" \
+    --location "$location" \
+    --assign-identity \
+    --output none --only-show-errors
 }
 
 get_endpoint() {
@@ -623,10 +645,12 @@ main() {
 
       # Create or reuse Foundry resource
       local account_name
-      account_name="$(create_foundry_resource "$subscription_id" "$prefix" "$model_type" "$location")"
+      account_name="$(create_foundry_resource "$subscription_id" "$subscription_name" "$prefix" "$model_type" "$location")"
       log "  Foundry resource: $account_name"
 
       local resource_group="rg-foundry"
+      create_foundry_project "$account_name" "$subscription_name" "$resource_group" "$location"
+
       local endpoint
       endpoint="$(get_endpoint "$account_name" "$resource_group" "$model_type")"
 
