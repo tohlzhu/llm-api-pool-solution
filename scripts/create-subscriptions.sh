@@ -51,7 +51,7 @@ Billing scope format (full ARM resource ID):
   EA:  /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/enrollmentAccounts/{enrollmentAccountId}
        Find via: az billing enrollment-account list --query "[].id" -o tsv
   MCA: /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/billingProfiles/{billingProfileId}/invoiceSections/{invoiceSectionId}
-       Find via: az billing invoice section list --billing-account-name <ID> --billing-profile-name <ID> --query "[].id" -o tsv
+       Find via: az billing invoice section list --account-name <biIllingAccountId> --profile-name <billingProfileId> --query "[].id" -o tsv
   MPA: /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{customerId}
   Portal: Cost Management + Billing -> Billing scopes / Invoice sections -> Properties -> ID
 

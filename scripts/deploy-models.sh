@@ -26,7 +26,7 @@ DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 # Default TPM per model (used when --tpm not specified)
 declare -A DEFAULT_TPM=(
   [claude-opus-4-8]=2000000
-  [claude-sonnet-5]=4000000
+  [claude-sonnet-5]=2000000
   [claude-haiku-4-5]=4000000
   [gpt-5.5]=10000000
   [gpt-5.6-terra]=10000000
