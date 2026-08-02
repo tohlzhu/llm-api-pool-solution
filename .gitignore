@@ -219,3 +219,6 @@ __marimo__/
 
 # Generated output from provisioning scripts
 generated/
+
+# Superpowers SDD scratch workspace (ledger, briefs, review packages)
+.superpowers/
