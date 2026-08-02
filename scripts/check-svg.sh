@@ -53,7 +53,7 @@ check_forbidden() {
     log "  FORBIDDEN: external URL reference present"
     rc=1
   fi
-  if grep -q '@font-face\|@import' "$file"; then
+  if grep -qi '@font-face\|@import' "$file"; then
     log "  FORBIDDEN: external font or stylesheet import present"
     rc=1
   fi
