@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 900" width="1480" height="900" role="img">
+  <title>LiteLLM model_name Isolation and Fallback Order</title>
+  <desc>Comparison of a single shared model name against five isolation groups, showing that one suspended group affects only two of ten Foundry endpoints, followed by the ordered fallback path from the affected group to Vertex Claude and then to GPT, with cross-group fallback explicitly forbidden.</desc>
+  <!-- NOTE: This <style> block is intentionally duplicated verbatim (plus a few appended classes)
+       in assets/architecture-overview.svg. GitHub renders .svg files via <img> in SVG secure
+       static mode, which forbids external stylesheets, so each SVG must be self-contained.
+       Do not factor this CSS out into a shared file. -->
+  <style>
+    .canvas { fill: #f8fafc; }
+    .frame { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; }
+    .frame-title { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 17px; font-weight: 600; fill: #0f172a; }
+    .title { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 25px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; fill: #475569; }
+    .band-claude { fill: #fff1e6; stroke: #c2570e; stroke-width: 1.5; }
+    .band-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2; }
+    .band-label { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #9a3412; }
+    .band-label-fault { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #b91c1c; }
+    .chip-claude { fill: #ffffff; stroke: #c2570e; stroke-width: 1.2; }
+    .chip-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5; }
+    .chip-shared { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.2; }
+    .box-vertex { fill: #f1f5f9; stroke: #475569; stroke-width: 1.5; }
+    .box-gpt { fill: #e7f7ef; stroke: #15803d; stroke-width: 1.5; }
+    .box-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2; }
+    .lbl { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; fill: #0f172a; }
+    .lbl-muted { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; fill: #475569; }
+    .lbl-strong { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 600; fill: #0f172a; }
+    .lbl-fault { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 600; fill: #b91c1c; }
+    .lbl-ok { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 600; fill: #15803d; }
+    .mono { font-size: 13px; font-family: 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace; fill: #0f172a; }
+    .arrow-normal { stroke: #0369a1; stroke-width: 2; fill: none; }
+    .arrow-fallback { stroke: #c2570e; stroke-width: 2; fill: none; stroke-dasharray: 7 4; }
+    .arrow-blocked { stroke: #b91c1c; stroke-width: 2.5; fill: none; }
+    .step-num { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; font-weight: 700; fill: #0369a1; }
+    .strike { stroke: #b91c1c; stroke-width: 3; }
+  </style>
+  <defs>
+    <marker id="arrow-normal-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0369a1"/>
+    </marker>
+    <marker id="arrow-fallback-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2570e"/>
+    </marker>
+    <marker id="arrow-blocked-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+  </defs>
+  <rect class="canvas" x="0" y="0" width="1480" height="900"/>
+
+  <!-- Header -->
+  <text class="title" x="740" y="44" text-anchor="middle">model_name Isolation — Blast Radius and Fallback Order</text>
+  <text class="subtitle" x="740" y="70" text-anchor="middle">Example: claude-sonnet-5 across 10 Foundry subscriptions (2 endpoints per isolation group)</text>
+
+  <!-- Left panel: without isolation -->
+  <rect class="frame" x="40" y="110" width="580" height="250"/>
+  <text class="frame-title" x="60" y="138">Without isolation — one shared model_name</text>
+  <text class="mono" x="60" y="162">model_name: claude-sonnet-5</text>
+
+  <!-- Row 1 chips -->
+  <g>
+    <rect class="chip-shared" x="82" y="176" width="88" height="54"/>
+    <text class="lbl" x="126" y="207" text-anchor="middle">sub01</text>
+    <rect class="chip-shared" x="178" y="176" width="88" height="54"/>
+    <text class="lbl" x="222" y="207" text-anchor="middle">sub02</text>
+    <rect class="chip-shared" x="274" y="176" width="88" height="54"/>
+    <text class="lbl" x="318" y="207" text-anchor="middle">sub03</text>
+    <rect class="chip-shared" x="370" y="176" width="88" height="54"/>
+    <text class="lbl" x="414" y="207" text-anchor="middle">sub04</text>
+    <rect class="chip-shared" x="466" y="176" width="88" height="54"/>
+    <text class="lbl" x="510" y="207" text-anchor="middle">sub05</text>
+  </g>
+  <!-- Row 2 chips -->
+  <g>
+    <rect class="chip-shared" x="82" y="250" width="88" height="54"/>
+    <text class="lbl" x="126" y="281" text-anchor="middle">sub06</text>
+    <rect class="chip-shared" x="178" y="250" width="88" height="54"/>
+    <text class="lbl" x="222" y="281" text-anchor="middle">sub07</text>
+    <rect class="chip-shared" x="274" y="250" width="88" height="54"/>
+    <text class="lbl" x="318" y="281" text-anchor="middle">sub08</text>
+    <rect class="chip-shared" x="370" y="250" width="88" height="54"/>
+    <text class="lbl" x="414" y="281" text-anchor="middle">sub09</text>
+    <rect class="chip-shared" x="466" y="250" width="88" height="54"/>
+    <text class="lbl" x="510" y="281" text-anchor="middle">sub10</text>
+  </g>
+
+  <text class="lbl-fault" x="60" y="330">One content-policy hit suspends the shared name</text>
+  <text class="lbl-fault" x="60" y="350">Impact: all 10 endpoints · every team loses the model</text>
+
+  <!-- Right panel: with 5 isolation groups -->
+  <rect class="frame" x="660" y="110" width="780" height="250"/>
+  <text class="frame-title" x="680" y="138">With 5 isolation groups</text>
+
+  <!-- Band 1: suspended -->
+  <g>
+    <rect class="band-fault" x="670" y="150" width="138" height="150"/>
+    <text class="band-label-fault" x="739" y="172" text-anchor="middle">grp1 ✗ SUSPENDED</text>
+    <rect class="chip-fault" x="678" y="196" width="60" height="48"/>
+    <text class="lbl" x="708" y="224" text-anchor="middle">sub01</text>
+    <rect class="chip-fault" x="742" y="196" width="60" height="48"/>
+    <text class="lbl" x="772" y="224" text-anchor="middle">sub02</text>
+    <text class="lbl-muted" x="739" y="336" text-anchor="middle">team A</text>
+  </g>
+
+  <!-- Band 2: healthy -->
+  <g>
+    <rect class="band-claude" x="818" y="150" width="138" height="150"/>
+    <text class="band-label" x="887" y="172" text-anchor="middle">grp2 ✓ healthy</text>
+    <rect class="chip-claude" x="826" y="196" width="60" height="48"/>
+    <text class="lbl" x="856" y="224" text-anchor="middle">sub03</text>
+    <rect class="chip-claude" x="890" y="196" width="60" height="48"/>
+    <text class="lbl" x="920" y="224" text-anchor="middle">sub04</text>
+    <text class="lbl-muted" x="887" y="336" text-anchor="middle">team B</text>
+  </g>
+
+  <!-- Band 3: healthy -->
+  <g>
+    <rect class="band-claude" x="966" y="150" width="138" height="150"/>
+    <text class="band-label" x="1035" y="172" text-anchor="middle">grp3 ✓ healthy</text>
+    <rect class="chip-claude" x="974" y="196" width="60" height="48"/>
+    <text class="lbl" x="1004" y="224" text-anchor="middle">sub05</text>
+    <rect class="chip-claude" x="1038" y="196" width="60" height="48"/>
+    <text class="lbl" x="1068" y="224" text-anchor="middle">sub06</text>
+    <text class="lbl-muted" x="1035" y="336" text-anchor="middle">team C</text>
+  </g>
+
+  <!-- Band 4: healthy -->
+  <g>
+    <rect class="band-claude" x="1114" y="150" width="138" height="150"/>
+    <text class="band-label" x="1183" y="172" text-anchor="middle">grp4 ✓ healthy</text>
+    <rect class="chip-claude" x="1122" y="196" width="60" height="48"/>
+    <text class="lbl" x="1152" y="224" text-anchor="middle">sub07</text>
+    <rect class="chip-claude" x="1186" y="196" width="60" height="48"/>
+    <text class="lbl" x="1216" y="224" text-anchor="middle">sub08</text>
+    <text class="lbl-muted" x="1183" y="336" text-anchor="middle">team D</text>
+  </g>
+
+  <!-- Band 5: healthy -->
+  <g>
+    <rect class="band-claude" x="1262" y="150" width="138" height="150"/>
+    <text class="band-label" x="1331" y="172" text-anchor="middle">grp5 ✓ healthy</text>
+    <rect class="chip-claude" x="1270" y="196" width="60" height="48"/>
+    <text class="lbl" x="1300" y="224" text-anchor="middle">sub09</text>
+    <rect class="chip-claude" x="1334" y="196" width="60" height="48"/>
+    <text class="lbl" x="1364" y="224" text-anchor="middle">sub10</text>
+    <text class="lbl-muted" x="1331" y="336" text-anchor="middle">team E</text>
+  </g>
+
+  <text class="lbl-ok" x="680" y="352">Impact: 2 of 10 endpoints · 80% capacity intact · only team A affected</text>
+
+  <!-- Fallback ladder -->
+  <rect class="frame" x="660" y="400" width="780" height="420"/>
+  <text class="frame-title" x="680" y="430">Fallback order for the affected group</text>
+
+  <rect class="box-fault" x="680" y="448" width="190" height="272"/>
+  <text class="mono" x="775" y="578" text-anchor="middle">claude-sonnet-5-grp1</text>
+  <text class="lbl-fault" x="775" y="600" text-anchor="middle">suspended</text>
+
+  <!-- Step 1: same group -->
+  <text class="step-num" x="888" y="465" text-anchor="middle">①</text>
+  <line class="arrow-normal" x1="870" y1="470" x2="950" y2="470" marker-end="url(#arrow-normal-head)"/>
+  <rect class="chip-claude" x="955" y="450" width="190" height="40"/>
+  <text class="mono" x="1050" y="475" text-anchor="middle">sub01 → sub02</text>
+  <text class="lbl" x="1165" y="463">Healthy endpoint inside the</text>
+  <text class="lbl" x="1165" y="481">same group first</text>
+
+  <!-- Step 2: vertex claude -->
+  <text class="step-num" x="888" y="535" text-anchor="middle">②</text>
+  <line class="arrow-fallback" x1="870" y1="540" x2="950" y2="540" marker-end="url(#arrow-fallback-head)"/>
+  <rect class="box-vertex" x="955" y="520" width="190" height="40"/>
+  <text class="mono" x="1050" y="545" text-anchor="middle">vertex-claude-sonnet</text>
+  <text class="lbl" x="1165" y="533">Same model type, different cloud</text>
+  <text class="lbl" x="1165" y="551">— output style preserved</text>
+
+  <!-- Step 3: gpt cross-model -->
+  <text class="step-num" x="888" y="605" text-anchor="middle">③</text>
+  <line class="arrow-fallback" x1="870" y1="610" x2="950" y2="610" marker-end="url(#arrow-fallback-head)"/>
+  <rect class="box-gpt" x="955" y="590" width="190" height="40"/>
+  <text class="mono" x="1050" y="615" text-anchor="middle">gpt-5.5-grp1</text>
+  <text class="lbl" x="1165" y="614">Cross-model, same group number</text>
+
+  <!-- Blocked: never cross-group -->
+  <line class="arrow-blocked" x1="870" y1="690" x2="950" y2="690" marker-end="url(#arrow-blocked-head)"/>
+  <line class="strike" x1="888" y1="676" x2="932" y2="704"/>
+  <text class="lbl-fault" x="910" y="662" text-anchor="middle">╳</text>
+  <rect class="chip-claude" x="955" y="670" width="220" height="40"/>
+  <text class="mono" x="1065" y="695" text-anchor="middle">claude-sonnet-5-grp2..5</text>
+  <text class="lbl-fault" x="1195" y="683">NEVER — would spread suspect</text>
+  <text class="lbl-fault" x="1195" y="701">traffic into healthy groups</text>
+
+  <!-- Footer -->
+  <text class="lbl-muted" x="740" y="860" text-anchor="middle">Audit requirement: log the model_name group and user identity on every request</text>
+</svg>
