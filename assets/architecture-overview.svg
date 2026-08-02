@@ -1,0 +1,357 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1080" width="1480" height="1080" role="img">
+  <title>LiteLLM Gateway and Multi-Subscription Azure Foundry Supply Pools</title>
+  <desc>Layered architecture showing consumer applications and scheduled jobs entering a LiteLLM gateway on AKS, which routes user-facing model names to five isolation groups across ten Claude Foundry subscriptions, five GPT subscriptions, two dedicated batch subscriptions, one DeepSeek subscription, and a cross-cloud Vertex Claude backup channel.</desc>
+  <!-- NOTE: This <style> block is intentionally duplicated verbatim (plus a few appended classes)
+       from assets/architecture-isolation-fallback.svg. GitHub renders .svg files via <img> in SVG
+       secure static mode, which forbids external stylesheets, so each SVG must be self-contained.
+       Do not factor this CSS out into a shared file. -->
+  <style>
+    .canvas { fill: #f8fafc; }
+    .frame { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; }
+    .frame-title { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 17px; font-weight: 600; fill: #0f172a; }
+    .title { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 25px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; fill: #475569; }
+    .band-claude { fill: #fff1e6; stroke: #c2570e; stroke-width: 1.5; }
+    .band-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2; }
+    .band-label { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #9a3412; }
+    .band-label-fault { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #b91c1c; }
+    .chip-claude { fill: #ffffff; stroke: #c2570e; stroke-width: 1.2; }
+    .chip-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.5; }
+    .chip-shared { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.2; }
+    .box-vertex { fill: #f1f5f9; stroke: #475569; stroke-width: 1.5; }
+    .box-gpt { fill: #e7f7ef; stroke: #15803d; stroke-width: 1.5; }
+    .box-fault { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2; }
+    .lbl { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; fill: #0f172a; }
+    .lbl-muted { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; fill: #475569; }
+    .lbl-strong { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 600; fill: #0f172a; }
+    .lbl-fault { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 600; fill: #b91c1c; }
+    .lbl-ok { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 600; fill: #15803d; }
+    .mono { font-size: 13px; font-family: 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace; fill: #0f172a; }
+    .arrow-normal { stroke: #0369a1; stroke-width: 2; fill: none; }
+    .arrow-fallback { stroke: #c2570e; stroke-width: 2; fill: none; stroke-dasharray: 7 4; }
+    .arrow-blocked { stroke: #b91c1c; stroke-width: 2.5; fill: none; }
+    .step-num { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; font-weight: 700; fill: #0369a1; }
+    .strike { stroke: #b91c1c; stroke-width: 3; }
+    .box-consumer { fill: #eef2ff; stroke: #4f5bd5; stroke-width: 1.5; }
+    .box-gateway { fill: #e0f2fe; stroke: #0369a1; stroke-width: 2; }
+    .box-ops { fill: #e0f2fe; stroke: #0369a1; stroke-width: 1.5; }
+    .box-copilot { fill: #f1f5f9; stroke: #475569; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .box-name-claude { fill: #fff1e6; stroke: #c2570e; stroke-width: 1.5; }
+    .box-name-gpt { fill: #e7f7ef; stroke: #15803d; stroke-width: 1.5; }
+    .box-name-batch { fill: #f3e8ff; stroke: #7e22ce; stroke-width: 1.5; }
+    .box-name-ds { fill: #f1f5f9; stroke: #475569; stroke-width: 1.5; }
+    .band-gpt { fill: #e7f7ef; stroke: #15803d; stroke-width: 1.5; }
+    .band-batch { fill: #f3e8ff; stroke: #7e22ce; stroke-width: 1.5; }
+    .chip-gpt { fill: #ffffff; stroke: #15803d; stroke-width: 1.2; }
+    .chip-batch { fill: #ffffff; stroke: #7e22ce; stroke-width: 1.2; }
+    .band-label-gpt { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #15803d; }
+    .band-label-batch { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #7e22ce; }
+    .layer-tag { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; font-weight: 700; fill: #475569; }
+  </style>
+  <defs>
+    <marker id="arrow-normal-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0369a1"/>
+    </marker>
+    <marker id="arrow-fallback-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2570e"/>
+    </marker>
+  </defs>
+  <rect class="canvas" x="0" y="0" width="1480" height="1080"/>
+
+  <!-- Header -->
+  <text class="title" x="740" y="44" text-anchor="middle">LiteLLM Gateway + Multi-Subscription Azure Foundry Supply Pools</text>
+  <text class="subtitle" x="740" y="70" text-anchor="middle">18 subscriptions · eastus2 · GlobalStandard deployments · ~1000 employees across 5 teams</text>
+
+  <!-- Band 1: Consumers -->
+  <g>
+    <rect class="box-consumer" x="40" y="100" width="560" height="110"/>
+    <text class="frame-title" x="60" y="128">Developer Apps / Internal Tools / Agents</text>
+    <text class="lbl-muted" x="60" y="152">5 teams · ~1000 employees · interactive workloads</text>
+  </g>
+  <g>
+    <rect class="box-consumer" x="620" y="100" width="340" height="110"/>
+    <text class="frame-title" x="640" y="128">Scheduled Jobs / Batch Workloads</text>
+    <text class="lbl-muted" x="640" y="152">repetitive prompts · unattended</text>
+  </g>
+  <g>
+    <rect class="box-copilot" x="1080" y="100" width="360" height="110"/>
+    <text class="frame-title" x="1100" y="128">Employee IDE — VS Code + GitHub Copilot</text>
+    <text class="lbl-muted" x="1100" y="150">L5 · Vibe Coding · NOT a LiteLLM backend</text>
+    <text class="lbl-muted" x="1100" y="168">1:1 accounts · human-interactive only</text>
+  </g>
+
+  <!-- Band 1 -> Band 2 arrows -->
+  <line class="arrow-normal" x1="320" y1="210" x2="320" y2="250" marker-end="url(#arrow-normal-head)"/>
+  <text class="lbl" x="330" y="235">virtual key</text>
+  <line class="arrow-normal" x1="790" y1="210" x2="790" y2="250" marker-end="url(#arrow-normal-head)"/>
+  <text class="lbl" x="800" y="235">batch key</text>
+
+  <!-- IDE bypasses the gateway entirely: short arrow down to Copilot service box -->
+  <line class="arrow-normal" x1="1260" y1="210" x2="1260" y2="250" marker-end="url(#arrow-normal-head)"/>
+
+  <!-- Band 2: Gateway -->
+  <g>
+    <rect class="box-gateway" x="40" y="250" width="920" height="140"/>
+    <text class="frame-title" x="60" y="278">LiteLLM API Gateway on AKS</text>
+    <text class="lbl" x="60" y="304">• auth · virtual keys · teams</text>
+    <text class="lbl" x="60" y="326">• model_name isolation (5 groups)</text>
+    <text class="lbl" x="60" y="348">• routing: simple-shuffle + weighted failover</text>
+    <text class="lbl" x="500" y="304">• retry · cooldown · fallback chains</text>
+    <text class="lbl" x="500" y="326">• full request/response logging</text>
+    <text class="lbl" x="500" y="348">• cost, budget and quota governance</text>
+  </g>
+  <g>
+    <rect class="box-ops" x="1000" y="250" width="200" height="140"/>
+    <text class="frame-title" x="1020" y="278">Shared state and</text>
+    <text class="frame-title" x="1020" y="296">operations plane</text>
+    <text class="lbl" x="1020" y="320">Redis — shared router state</text>
+    <text class="lbl" x="1020" y="340">PostgreSQL — spend and logs</text>
+    <text class="lbl" x="1020" y="360">Key Vault — endpoint secrets</text>
+    <text class="lbl" x="1020" y="380">Monitor / Sentinel / Langfuse</text>
+  </g>
+
+  <!-- GitHub Copilot service box, far right of band 2, no arrow into gateway -->
+  <g>
+    <rect class="box-copilot" x="1240" y="250" width="200" height="80"/>
+    <text class="lbl-strong" x="1340" y="278" text-anchor="middle">GitHub Copilot</text>
+    <text class="lbl-strong" x="1340" y="296" text-anchor="middle">service</text>
+    <text class="lbl-muted" x="1340" y="316" text-anchor="middle">outside the API pool</text>
+  </g>
+
+  <!-- Band 2 -> Band 3 arrows -->
+  <line class="arrow-normal" x1="175" y1="390" x2="175" y2="430" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="455" y1="390" x2="455" y2="430" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="735" y1="390" x2="735" y2="430" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="995" y1="390" x2="995" y2="430" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="1280" y1="390" x2="1280" y2="430" marker-end="url(#arrow-normal-head)"/>
+
+  <!-- Band 3: Model names -->
+  <text class="layer-tag" x="60" y="424">USER-FACING MODEL NAMES</text>
+  <g>
+    <rect class="box-name-claude" x="40" y="430" width="270" height="90"/>
+    <text class="mono" x="55" y="452">claude-opus-4-8-grp{1..5}</text>
+    <text class="mono" x="55" y="472">claude-sonnet-5-grp{1..5}</text>
+    <text class="mono" x="55" y="492">claude-haiku-4-5-grp{1..5}</text>
+  </g>
+  <g>
+    <rect class="box-name-gpt" x="330" y="430" width="250" height="90"/>
+    <text class="mono" x="345" y="462">gpt-5.5-grp{1..5}</text>
+    <text class="mono" x="345" y="484">gpt-5.6-terra/sol/luna-grp{1..5}</text>
+  </g>
+  <g>
+    <rect class="box-name-batch" x="600" y="430" width="270" height="90"/>
+    <text class="mono" x="615" y="462">batch-gpt-5.5-grp{1..2}</text>
+    <text class="mono" x="615" y="484">batch-gpt-5.6-terra/sol/luna-grp{1..2}</text>
+  </g>
+  <g>
+    <rect class="box-name-ds" x="890" y="430" width="210" height="90"/>
+    <text class="mono" x="905" y="462">DeepSeek-V4-Pro-grp1</text>
+    <text class="mono" x="905" y="482">DeepSeek-V4-Flash-grp1</text>
+  </g>
+  <g>
+    <rect class="box-name-ds" x="1120" y="430" width="320" height="90"/>
+    <text class="mono" x="1135" y="462">vertex-claude-opus / -sonnet / -haiku</text>
+    <text class="lbl-muted" x="1135" y="484">fallback target only</text>
+  </g>
+
+  <!-- Band 3 -> Band 4 arrows -->
+  <line class="arrow-normal" x1="175" y1="520" x2="175" y2="560" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="455" y1="520" x2="455" y2="790" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="735" y1="520" x2="735" y2="790" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="995" y1="520" x2="995" y2="790" marker-end="url(#arrow-normal-head)"/>
+  <line class="arrow-normal" x1="1280" y1="520" x2="1280" y2="560" marker-end="url(#arrow-normal-head)"/>
+
+  <!-- Band 4, Row A: Claude frame + Vertex frame -->
+  <g>
+    <rect class="frame" x="40" y="560" width="1020" height="200"/>
+    <text class="layer-tag" x="60" y="584">L1 / L2</text>
+    <text class="frame-title" x="60" y="604">Microsoft Foundry — Claude Pool</text>
+    <text class="lbl-muted" x="60" y="624">10 subscriptions × 3 endpoints = 30 endpoints · Opus / Sonnet / Haiku</text>
+
+    <!-- 5 claude bands, each w=186 h=130 at x=60/256/452/648/844, y=610 -->
+    <g>
+      <rect class="band-claude" x="60" y="610" width="186" height="130"/>
+      <text class="band-label" x="153" y="628" text-anchor="middle">grp1</text>
+      <rect class="chip-claude" x="66" y="650" width="80" height="76"/>
+      <text class="mono" x="106" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="106" y="686" text-anchor="middle">sub01</text>
+      <text class="lbl-muted" x="106" y="702" text-anchor="middle">3 ep</text>
+      <rect class="chip-claude" x="160" y="650" width="80" height="76"/>
+      <text class="mono" x="200" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="200" y="686" text-anchor="middle">sub02</text>
+      <text class="lbl-muted" x="200" y="702" text-anchor="middle">3 ep</text>
+    </g>
+    <g>
+      <rect class="band-claude" x="256" y="610" width="186" height="130"/>
+      <text class="band-label" x="349" y="628" text-anchor="middle">grp2</text>
+      <rect class="chip-claude" x="262" y="650" width="80" height="76"/>
+      <text class="mono" x="302" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="302" y="686" text-anchor="middle">sub03</text>
+      <text class="lbl-muted" x="302" y="702" text-anchor="middle">3 ep</text>
+      <rect class="chip-claude" x="356" y="650" width="80" height="76"/>
+      <text class="mono" x="396" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="396" y="686" text-anchor="middle">sub04</text>
+      <text class="lbl-muted" x="396" y="702" text-anchor="middle">3 ep</text>
+    </g>
+    <g>
+      <rect class="band-claude" x="452" y="610" width="186" height="130"/>
+      <text class="band-label" x="545" y="628" text-anchor="middle">grp3</text>
+      <rect class="chip-claude" x="458" y="650" width="80" height="76"/>
+      <text class="mono" x="498" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="498" y="686" text-anchor="middle">sub05</text>
+      <text class="lbl-muted" x="498" y="702" text-anchor="middle">3 ep</text>
+      <rect class="chip-claude" x="552" y="650" width="80" height="76"/>
+      <text class="mono" x="592" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="592" y="686" text-anchor="middle">sub06</text>
+      <text class="lbl-muted" x="592" y="702" text-anchor="middle">3 ep</text>
+    </g>
+    <g>
+      <rect class="band-claude" x="648" y="610" width="186" height="130"/>
+      <text class="band-label" x="741" y="628" text-anchor="middle">grp4</text>
+      <rect class="chip-claude" x="654" y="650" width="80" height="76"/>
+      <text class="mono" x="694" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="694" y="686" text-anchor="middle">sub07</text>
+      <text class="lbl-muted" x="694" y="702" text-anchor="middle">3 ep</text>
+      <rect class="chip-claude" x="748" y="650" width="80" height="76"/>
+      <text class="mono" x="788" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="788" y="686" text-anchor="middle">sub08</text>
+      <text class="lbl-muted" x="788" y="702" text-anchor="middle">3 ep</text>
+    </g>
+    <g>
+      <rect class="band-claude" x="844" y="610" width="186" height="130"/>
+      <text class="band-label" x="937" y="628" text-anchor="middle">grp5</text>
+      <rect class="chip-claude" x="850" y="650" width="80" height="76"/>
+      <text class="mono" x="890" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="890" y="686" text-anchor="middle">sub09</text>
+      <text class="lbl-muted" x="890" y="702" text-anchor="middle">3 ep</text>
+      <rect class="chip-claude" x="944" y="650" width="80" height="76"/>
+      <text class="mono" x="984" y="670" text-anchor="middle">{prefix}-claude-</text>
+      <text class="mono" x="984" y="686" text-anchor="middle">sub10</text>
+      <text class="lbl-muted" x="984" y="702" text-anchor="middle">3 ep</text>
+    </g>
+
+    <text class="lbl-muted" x="60" y="748">2 subscriptions per group — a suspended group costs 20% of capacity</text>
+  </g>
+
+  <g>
+    <rect class="box-vertex" x="1080" y="560" width="360" height="410"/>
+    <text class="layer-tag" x="1100" y="584">L4</text>
+    <text class="frame-title" x="1100" y="604">Partner Vertex AI — Claude</text>
+    <text class="lbl" x="1100" y="628">Cross-cloud backup channel</text>
+    <text class="lbl-muted" x="1100" y="648">Separate provider, billing and SLA</text>
+    <text class="lbl-muted" x="1100" y="666">First fallback for every Claude group</text>
+  </g>
+
+  <!-- Fallback arrows: Claude frame -> Vertex frame, Claude frame -> GPT frame -->
+  <path class="arrow-fallback" d="M 1060 650 L 1080 650" marker-end="url(#arrow-fallback-head)"/>
+  <text class="lbl" x="1000" y="643" text-anchor="middle">fallback ①</text>
+  <path class="arrow-fallback" d="M 300 760 L 300 790" marker-end="url(#arrow-fallback-head)"/>
+  <text class="lbl" x="360" y="778">fallback ②</text>
+
+  <!-- Band 4, Row B: GPT frame, Batch frame, DeepSeek frame -->
+  <g>
+    <rect class="frame" x="40" y="790" width="620" height="180"/>
+    <text class="layer-tag" x="60" y="814">L3</text>
+    <text class="frame-title" x="60" y="834">Microsoft Foundry — GPT Pool</text>
+    <text class="lbl-muted" x="60" y="854">5 subscriptions × 4 endpoints · gpt-5.5 / 5.6-terra / 5.6-sol / 5.6-luna</text>
+
+    <!-- 5 gpt bands w=106 h=120 at x=60/176/292/408/524, y=830 -->
+    <g>
+      <rect class="band-gpt" x="60" y="830" width="106" height="120"/>
+      <text class="band-label-gpt" x="113" y="848" text-anchor="middle">grp1</text>
+      <rect class="chip-gpt" x="73" y="866" width="80" height="70"/>
+      <text class="mono" x="113" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="113" y="902" text-anchor="middle">sub01</text>
+      <text class="lbl-muted" x="113" y="918" text-anchor="middle">4 ep</text>
+    </g>
+    <g>
+      <rect class="band-gpt" x="176" y="830" width="106" height="120"/>
+      <text class="band-label-gpt" x="229" y="848" text-anchor="middle">grp2</text>
+      <rect class="chip-gpt" x="189" y="866" width="80" height="70"/>
+      <text class="mono" x="229" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="229" y="902" text-anchor="middle">sub02</text>
+      <text class="lbl-muted" x="229" y="918" text-anchor="middle">4 ep</text>
+    </g>
+    <g>
+      <rect class="band-gpt" x="292" y="830" width="106" height="120"/>
+      <text class="band-label-gpt" x="345" y="848" text-anchor="middle">grp3</text>
+      <rect class="chip-gpt" x="305" y="866" width="80" height="70"/>
+      <text class="mono" x="345" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="345" y="902" text-anchor="middle">sub03</text>
+      <text class="lbl-muted" x="345" y="918" text-anchor="middle">4 ep</text>
+    </g>
+    <g>
+      <rect class="band-gpt" x="408" y="830" width="106" height="120"/>
+      <text class="band-label-gpt" x="461" y="848" text-anchor="middle">grp4</text>
+      <rect class="chip-gpt" x="421" y="866" width="80" height="70"/>
+      <text class="mono" x="461" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="461" y="902" text-anchor="middle">sub04</text>
+      <text class="lbl-muted" x="461" y="918" text-anchor="middle">4 ep</text>
+    </g>
+    <g>
+      <rect class="band-gpt" x="524" y="830" width="106" height="120"/>
+      <text class="band-label-gpt" x="577" y="848" text-anchor="middle">grp5</text>
+      <rect class="chip-gpt" x="537" y="866" width="80" height="70"/>
+      <text class="mono" x="577" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="577" y="902" text-anchor="middle">sub05</text>
+      <text class="lbl-muted" x="577" y="918" text-anchor="middle">4 ep</text>
+    </g>
+  </g>
+
+  <g>
+    <rect class="frame" x="680" y="790" width="200" height="180"/>
+    <text class="frame-title" x="700" y="814">Batch Pool (isolated)</text>
+    <text class="lbl-muted" x="700" y="834">2 dedicated subscriptions</text>
+
+    <!-- 2 batch bands w=76 h=120 at x=700/784, y=830 -->
+    <g>
+      <rect class="band-batch" x="700" y="830" width="76" height="120"/>
+      <text class="band-label-batch" x="738" y="848" text-anchor="middle">bgrp1</text>
+      <rect class="chip-batch" x="706" y="866" width="64" height="70"/>
+      <text class="mono" x="738" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="738" y="902" text-anchor="middle">sub06</text>
+      <text class="lbl-muted" x="738" y="918" text-anchor="middle">4 ep</text>
+    </g>
+    <g>
+      <rect class="band-batch" x="784" y="830" width="76" height="120"/>
+      <text class="band-label-batch" x="822" y="848" text-anchor="middle">bgrp2</text>
+      <rect class="chip-batch" x="790" y="866" width="64" height="70"/>
+      <text class="mono" x="822" y="886" text-anchor="middle">{prefix}-gpt-</text>
+      <text class="mono" x="822" y="902" text-anchor="middle">sub07</text>
+      <text class="lbl-muted" x="822" y="918" text-anchor="middle">4 ep</text>
+    </g>
+  </g>
+
+  <g>
+    <rect class="frame" x="900" y="790" width="200" height="180"/>
+    <text class="frame-title" x="920" y="814">DeepSeek Pool</text>
+    <text class="lbl-muted" x="920" y="834">1 subscription × 2 endpoints</text>
+    <rect class="box-name-ds" x="920" y="856" width="160" height="80"/>
+    <text class="mono" x="1000" y="884" text-anchor="middle">{prefix}-deepseek-sub01</text>
+    <text class="lbl-muted" x="1000" y="906" text-anchor="middle">grp1 · 2 ep</text>
+  </g>
+
+  <!-- Legend -->
+  <g>
+    <rect class="box-name-claude" x="40" y="1000" width="20" height="16"/>
+    <text class="lbl" x="66" y="1013">Claude supply</text>
+    <rect class="box-name-gpt" x="196" y="1000" width="20" height="16"/>
+    <text class="lbl" x="222" y="1013">GPT supply</text>
+    <rect class="box-name-batch" x="330" y="1000" width="20" height="16"/>
+    <text class="lbl" x="356" y="1013">Batch (isolated)</text>
+    <rect class="box-name-ds" x="486" y="1000" width="20" height="16"/>
+    <text class="lbl" x="512" y="1013">DeepSeek / Vertex backup</text>
+    <rect class="box-gateway" x="694" y="1000" width="20" height="16"/>
+    <text class="lbl" x="720" y="1013">Gateway</text>
+    <rect class="box-consumer" x="808" y="1000" width="20" height="16"/>
+    <text class="lbl" x="834" y="1013">Consumers</text>
+    <line class="arrow-fallback" x1="960" y1="1008" x2="1000" y2="1008"/>
+    <text class="lbl" x="1008" y="1013">fallback path</text>
+    <rect class="box-copilot" x="1140" y="1000" width="20" height="16"/>
+    <text class="lbl" x="1166" y="1013">outside the API pool</text>
+  </g>
+
+  <!-- Footnote -->
+  <text class="lbl-muted" x="740" y="1050" text-anchor="middle">Region eastus2 · SKU GlobalStandard · one Foundry account per subscription: fdry-{prefix}-subNN / proj-{prefix}-subNN · names are placeholders</text>
+  <text class="lbl-muted" x="740" y="1068" text-anchor="middle">Subscription names follow {prefix}-claude-subNN / {prefix}-gpt-subNN</text>
+</svg>
