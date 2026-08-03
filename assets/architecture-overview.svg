@@ -47,6 +47,7 @@
     .band-label-gpt { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #15803d; }
     .band-label-batch { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #7e22ce; }
     .layer-tag { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; font-weight: 700; fill: #475569; }
+    .mono-sm { font-size: 12px; font-family: 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace; fill: #0f172a; }
   </style>
   <defs>
     <marker id="arrow-normal-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -135,13 +136,15 @@
   </g>
   <g>
     <rect class="box-name-gpt" x="330" y="430" width="250" height="90"/>
-    <text class="mono" x="345" y="462">gpt-5.5-grp{1..5}</text>
-    <text class="mono" x="345" y="484">gpt-5.6-terra/sol/luna-grp{1..5}</text>
+    <text class="mono" x="345" y="452">gpt-5.5-grp{1..5}</text>
+    <text class="mono" x="345" y="472">gpt-5.6-terra/sol/</text>
+    <text class="mono" x="345" y="492">luna-grp{1..5}</text>
   </g>
   <g>
     <rect class="box-name-batch" x="600" y="430" width="270" height="90"/>
-    <text class="mono" x="615" y="462">batch-gpt-5.5-grp{1..2}</text>
-    <text class="mono" x="615" y="484">batch-gpt-5.6-terra/sol/luna-grp{1..2}</text>
+    <text class="mono" x="615" y="452">batch-gpt-5.5-grp{1..2}</text>
+    <text class="mono" x="615" y="472">batch-gpt-5.6-terra/sol/</text>
+    <text class="mono" x="615" y="492">luna-grp{1..2}</text>
   </g>
   <g>
     <rect class="box-name-ds" x="890" y="430" width="210" height="90"/>
@@ -156,28 +159,29 @@
 
   <!-- Band 3 -> Band 4 arrows -->
   <line class="arrow-normal" x1="175" y1="520" x2="175" y2="560" marker-end="url(#arrow-normal-head)"/>
-  <line class="arrow-normal" x1="455" y1="520" x2="455" y2="790" marker-end="url(#arrow-normal-head)"/>
-  <line class="arrow-normal" x1="735" y1="520" x2="735" y2="790" marker-end="url(#arrow-normal-head)"/>
-  <line class="arrow-normal" x1="995" y1="520" x2="995" y2="790" marker-end="url(#arrow-normal-head)"/>
   <line class="arrow-normal" x1="1280" y1="520" x2="1280" y2="560" marker-end="url(#arrow-normal-head)"/>
+  <!-- GPT/Batch/DeepSeek model names route around the Claude frame (which spans the
+       full Row A width) via a bus in the 20px gap between the Claude and Vertex frames,
+       then fan out along the top edge of Row B. -->
+  <path class="arrow-normal" d="M 455 520 L 455 548 L 1070 548 L 1070 782 L 340 782 L 340 790" marker-end="url(#arrow-normal-head)"/>
+  <path class="arrow-normal" d="M 735 520 L 735 552 L 1070 552 L 1070 782 L 780 782 L 780 790" marker-end="url(#arrow-normal-head)"/>
+  <path class="arrow-normal" d="M 995 520 L 995 556 L 1070 556 L 1070 782 L 1000 782 L 1000 790" marker-end="url(#arrow-normal-head)"/>
 
   <!-- Band 4, Row A: Claude frame + Vertex frame -->
   <g>
     <rect class="frame" x="40" y="560" width="1020" height="200"/>
     <text class="layer-tag" x="60" y="584">L1 / L2</text>
+    <text class="lbl-muted" x="140" y="584">10 subscriptions × 3 endpoints = 30 endpoints · Opus / Sonnet / Haiku</text>
     <text class="frame-title" x="60" y="604">Microsoft Foundry — Claude Pool</text>
-    <text class="lbl-muted" x="60" y="624">10 subscriptions × 3 endpoints = 30 endpoints · Opus / Sonnet / Haiku</text>
 
     <!-- 5 claude bands, each w=186 h=130 at x=60/256/452/648/844, y=610 -->
     <g>
       <rect class="band-claude" x="60" y="610" width="186" height="130"/>
       <text class="band-label" x="153" y="628" text-anchor="middle">grp1</text>
       <rect class="chip-claude" x="66" y="650" width="80" height="76"/>
-      <text class="mono" x="106" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="106" y="686" text-anchor="middle">sub01</text>
       <text class="lbl-muted" x="106" y="702" text-anchor="middle">3 ep</text>
       <rect class="chip-claude" x="160" y="650" width="80" height="76"/>
-      <text class="mono" x="200" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="200" y="686" text-anchor="middle">sub02</text>
       <text class="lbl-muted" x="200" y="702" text-anchor="middle">3 ep</text>
     </g>
@@ -185,11 +189,9 @@
       <rect class="band-claude" x="256" y="610" width="186" height="130"/>
       <text class="band-label" x="349" y="628" text-anchor="middle">grp2</text>
       <rect class="chip-claude" x="262" y="650" width="80" height="76"/>
-      <text class="mono" x="302" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="302" y="686" text-anchor="middle">sub03</text>
       <text class="lbl-muted" x="302" y="702" text-anchor="middle">3 ep</text>
       <rect class="chip-claude" x="356" y="650" width="80" height="76"/>
-      <text class="mono" x="396" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="396" y="686" text-anchor="middle">sub04</text>
       <text class="lbl-muted" x="396" y="702" text-anchor="middle">3 ep</text>
     </g>
@@ -197,11 +199,9 @@
       <rect class="band-claude" x="452" y="610" width="186" height="130"/>
       <text class="band-label" x="545" y="628" text-anchor="middle">grp3</text>
       <rect class="chip-claude" x="458" y="650" width="80" height="76"/>
-      <text class="mono" x="498" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="498" y="686" text-anchor="middle">sub05</text>
       <text class="lbl-muted" x="498" y="702" text-anchor="middle">3 ep</text>
       <rect class="chip-claude" x="552" y="650" width="80" height="76"/>
-      <text class="mono" x="592" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="592" y="686" text-anchor="middle">sub06</text>
       <text class="lbl-muted" x="592" y="702" text-anchor="middle">3 ep</text>
     </g>
@@ -209,11 +209,9 @@
       <rect class="band-claude" x="648" y="610" width="186" height="130"/>
       <text class="band-label" x="741" y="628" text-anchor="middle">grp4</text>
       <rect class="chip-claude" x="654" y="650" width="80" height="76"/>
-      <text class="mono" x="694" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="694" y="686" text-anchor="middle">sub07</text>
       <text class="lbl-muted" x="694" y="702" text-anchor="middle">3 ep</text>
       <rect class="chip-claude" x="748" y="650" width="80" height="76"/>
-      <text class="mono" x="788" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="788" y="686" text-anchor="middle">sub08</text>
       <text class="lbl-muted" x="788" y="702" text-anchor="middle">3 ep</text>
     </g>
@@ -221,11 +219,9 @@
       <rect class="band-claude" x="844" y="610" width="186" height="130"/>
       <text class="band-label" x="937" y="628" text-anchor="middle">grp5</text>
       <rect class="chip-claude" x="850" y="650" width="80" height="76"/>
-      <text class="mono" x="890" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="890" y="686" text-anchor="middle">sub09</text>
       <text class="lbl-muted" x="890" y="702" text-anchor="middle">3 ep</text>
       <rect class="chip-claude" x="944" y="650" width="80" height="76"/>
-      <text class="mono" x="984" y="670" text-anchor="middle">{prefix}-claude-</text>
       <text class="mono" x="984" y="686" text-anchor="middle">sub10</text>
       <text class="lbl-muted" x="984" y="702" text-anchor="middle">3 ep</text>
     </g>
@@ -243,24 +239,23 @@
   </g>
 
   <!-- Fallback arrows: Claude frame -> Vertex frame, Claude frame -> GPT frame -->
-  <path class="arrow-fallback" d="M 1060 650 L 1080 650" marker-end="url(#arrow-fallback-head)"/>
-  <text class="lbl" x="1000" y="643" text-anchor="middle">fallback ①</text>
+  <path class="arrow-fallback" d="M 1060 700 L 1080 700" marker-end="url(#arrow-fallback-head)"/>
+  <text class="lbl" x="1090" y="695">fallback ①</text>
   <path class="arrow-fallback" d="M 300 760 L 300 790" marker-end="url(#arrow-fallback-head)"/>
-  <text class="lbl" x="360" y="778">fallback ②</text>
+  <text class="lbl" x="315" y="778">fallback ②</text>
 
   <!-- Band 4, Row B: GPT frame, Batch frame, DeepSeek frame -->
   <g>
     <rect class="frame" x="40" y="790" width="620" height="180"/>
-    <text class="layer-tag" x="60" y="814">L3</text>
-    <text class="frame-title" x="60" y="834">Microsoft Foundry — GPT Pool</text>
-    <text class="lbl-muted" x="60" y="854">5 subscriptions × 4 endpoints · gpt-5.5 / 5.6-terra / 5.6-sol / 5.6-luna</text>
+    <text class="frame-title" x="60" y="810">Microsoft Foundry — GPT Pool</text>
+    <text class="layer-tag" x="60" y="826">L3</text>
+    <text class="lbl-muted" x="90" y="826">5 subscriptions × 4 endpoints · gpt-5.5 / 5.6-terra / 5.6-sol / 5.6-luna</text>
 
     <!-- 5 gpt bands w=106 h=120 at x=60/176/292/408/524, y=830 -->
     <g>
       <rect class="band-gpt" x="60" y="830" width="106" height="120"/>
       <text class="band-label-gpt" x="113" y="848" text-anchor="middle">grp1</text>
       <rect class="chip-gpt" x="73" y="866" width="80" height="70"/>
-      <text class="mono" x="113" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="113" y="902" text-anchor="middle">sub01</text>
       <text class="lbl-muted" x="113" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -268,7 +263,6 @@
       <rect class="band-gpt" x="176" y="830" width="106" height="120"/>
       <text class="band-label-gpt" x="229" y="848" text-anchor="middle">grp2</text>
       <rect class="chip-gpt" x="189" y="866" width="80" height="70"/>
-      <text class="mono" x="229" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="229" y="902" text-anchor="middle">sub02</text>
       <text class="lbl-muted" x="229" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -276,7 +270,6 @@
       <rect class="band-gpt" x="292" y="830" width="106" height="120"/>
       <text class="band-label-gpt" x="345" y="848" text-anchor="middle">grp3</text>
       <rect class="chip-gpt" x="305" y="866" width="80" height="70"/>
-      <text class="mono" x="345" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="345" y="902" text-anchor="middle">sub03</text>
       <text class="lbl-muted" x="345" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -284,7 +277,6 @@
       <rect class="band-gpt" x="408" y="830" width="106" height="120"/>
       <text class="band-label-gpt" x="461" y="848" text-anchor="middle">grp4</text>
       <rect class="chip-gpt" x="421" y="866" width="80" height="70"/>
-      <text class="mono" x="461" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="461" y="902" text-anchor="middle">sub04</text>
       <text class="lbl-muted" x="461" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -292,7 +284,6 @@
       <rect class="band-gpt" x="524" y="830" width="106" height="120"/>
       <text class="band-label-gpt" x="577" y="848" text-anchor="middle">grp5</text>
       <rect class="chip-gpt" x="537" y="866" width="80" height="70"/>
-      <text class="mono" x="577" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="577" y="902" text-anchor="middle">sub05</text>
       <text class="lbl-muted" x="577" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -300,15 +291,14 @@
 
   <g>
     <rect class="frame" x="680" y="790" width="200" height="180"/>
-    <text class="frame-title" x="700" y="814">Batch Pool (isolated)</text>
-    <text class="lbl-muted" x="700" y="834">2 dedicated subscriptions</text>
+    <text class="frame-title" x="700" y="806">Batch Pool (isolated)</text>
+    <text class="lbl-muted" x="700" y="822">2 dedicated subscriptions</text>
 
     <!-- 2 batch bands w=76 h=120 at x=700/784, y=830 -->
     <g>
       <rect class="band-batch" x="700" y="830" width="76" height="120"/>
       <text class="band-label-batch" x="738" y="848" text-anchor="middle">bgrp1</text>
       <rect class="chip-batch" x="706" y="866" width="64" height="70"/>
-      <text class="mono" x="738" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="738" y="902" text-anchor="middle">sub06</text>
       <text class="lbl-muted" x="738" y="918" text-anchor="middle">4 ep</text>
     </g>
@@ -316,7 +306,6 @@
       <rect class="band-batch" x="784" y="830" width="76" height="120"/>
       <text class="band-label-batch" x="822" y="848" text-anchor="middle">bgrp2</text>
       <rect class="chip-batch" x="790" y="866" width="64" height="70"/>
-      <text class="mono" x="822" y="886" text-anchor="middle">{prefix}-gpt-</text>
       <text class="mono" x="822" y="902" text-anchor="middle">sub07</text>
       <text class="lbl-muted" x="822" y="918" text-anchor="middle">4 ep</text>
     </g>
