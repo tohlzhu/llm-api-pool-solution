@@ -47,7 +47,6 @@
     .band-label-gpt { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; fill: #15803d; }
     .band-label-batch { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #7e22ce; }
     .layer-tag { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; font-weight: 700; fill: #475569; }
-    .mono-sm { font-size: 12px; font-family: 'Cascadia Code', Consolas, 'DejaVu Sans Mono', monospace; fill: #0f172a; }
   </style>
   <defs>
     <marker id="arrow-normal-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -127,7 +126,7 @@
   <line class="arrow-normal" x1="1280" y1="390" x2="1280" y2="430" marker-end="url(#arrow-normal-head)"/>
 
   <!-- Band 3: Model names -->
-  <text class="layer-tag" x="60" y="424">USER-FACING MODEL NAMES</text>
+  <text class="layer-tag" x="60" y="412">USER-FACING MODEL NAMES</text>
   <g>
     <rect class="box-name-claude" x="40" y="430" width="270" height="90"/>
     <text class="mono" x="55" y="452">claude-opus-4-8-grp{1..5}</text>
@@ -240,9 +239,9 @@
 
   <!-- Fallback arrows: Claude frame -> Vertex frame, Claude frame -> GPT frame -->
   <path class="arrow-fallback" d="M 1060 700 L 1080 700" marker-end="url(#arrow-fallback-head)"/>
-  <text class="lbl" x="1090" y="695">fallback ①</text>
+  <text class="lbl" x="1090" y="695">fallback ②</text>
   <path class="arrow-fallback" d="M 300 760 L 300 790" marker-end="url(#arrow-fallback-head)"/>
-  <text class="lbl" x="315" y="778">fallback ②</text>
+  <text class="lbl" x="315" y="778">fallback ③</text>
 
   <!-- Band 4, Row B: GPT frame, Batch frame, DeepSeek frame -->
   <g>
@@ -316,7 +315,7 @@
     <text class="frame-title" x="920" y="814">DeepSeek Pool</text>
     <text class="lbl-muted" x="920" y="834">1 subscription × 2 endpoints</text>
     <rect class="box-name-ds" x="920" y="856" width="160" height="80"/>
-    <text class="mono" x="1000" y="884" text-anchor="middle">{prefix}-deepseek-sub01</text>
+    <text class="mono" x="1000" y="884" text-anchor="middle">sub01</text>
     <text class="lbl-muted" x="1000" y="906" text-anchor="middle">grp1 · 2 ep</text>
   </g>
 

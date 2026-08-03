@@ -24,6 +24,7 @@ This repository is a Chinese enterprise solution package for a high-availability
 - There is no repository build or test suite. Use focused validation for the files touched: editor diagnostics for Markdown/YAML/JSON, shell syntax checks for Bash, and manual review for placeholder-only secrets.
 - For script changes, run `bash -n scripts/*.sh` as the first executable check.
 - For configuration changes, verify YAML/JSON syntax and confirm all secret-like values are placeholders or environment references.
+- For architecture diagram changes, run `bash scripts/check-svg.sh` to check well-formedness and forbidden constructs.
 
 ## Current Work Queue
 

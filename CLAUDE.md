@@ -24,6 +24,9 @@ python3 -c "import yaml; yaml.safe_load(open('config/litellm-config.example.yaml
 
 # JSON syntax check
 python3 -c "import json; json.load(open('.vscode/mcp.example.json'))"
+
+# SVG architecture diagram check (well-formedness + forbidden constructs)
+bash scripts/check-svg.sh
 ```
 
 ## Writing Rules
@@ -47,7 +50,7 @@ python3 -c "import json; json.load(open('.vscode/mcp.example.json'))"
   L5: GitHub Copilot — IDE/CLI human-interactive fallback only
 
 Horizontal isolation:
-  Batch pool: 5 additional subscriptions for scheduled/repetitive workloads
+  Batch pool: 2 additional subscriptions for scheduled/repetitive workloads
   Separated in LiteLLM as batch-* model groups with dedicated keys and budgets
 
 Gateway: LiteLLM on AKS with Redis (shared router state), PostgreSQL (spend/logs),
