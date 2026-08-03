@@ -136,6 +136,10 @@ Anthropic 和 OpenAI 对模型端点实施内容安全策略检测。当某个 F
 3. 用户分组映射应存储在 LiteLLM 数据库或外部配置中心，支持动态调整。
 4. 定时任务池（`batch-*`）不适用此隔离方案，因其使用独立订阅和端点，已天然隔离。
 
+下图对比无隔离与 5 组隔离下的故障影响范围，并给出受影响组的 fallback 优先级（图中文字为英文以避免字形缺失导致的显示问题）：
+
+![model_name isolation and fallback order](assets/architecture-isolation-fallback.svg)
+
 配套配置示例见 [config/litellm-config.example.yaml](config/litellm-config.example.yaml)。
 
 ### 4.3 第三层：GPT 池化与用户可选模型
@@ -175,6 +179,13 @@ Claude/GPT 服务端通常具备安全扫描、异常使用检测和滥用防护
 
 ## 5. 目标架构
 
+下图为整体目标架构（图中文字为英文以避免字形缺失导致的显示问题）：
+
+![LiteLLM gateway and multi-subscription Azure Foundry supply pools](assets/architecture-overview.svg)
+
+<details>
+<summary>纯文本等价描述（便于终端查看与文本检索）</summary>
+
 ```text
 Developer Apps / Internal Tools / Agents
                  |
@@ -209,6 +220,8 @@ Developer workflow:
 Employees --> VS Code / GitHub Copilot / MCP --> GitHub, Vercel, HF, Gmail tools
 Employees --> Corporate proxy / mitmproxy-copilot --> Elasticsearch / SIEM audit store
 ```
+
+</details>
 
 运维平面建议包括 AKS、Azure Cache for Redis、Azure Database for PostgreSQL、Azure Key Vault、Azure Monitor / Application Insights / Log Analytics / Sentinel，以及用于出口治理的 Private Link、NAT Gateway 或 Firewall。
 

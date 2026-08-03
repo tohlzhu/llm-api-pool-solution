@@ -12,3 +12,5 @@
 6. `scripts/test-endpoints.sh`：端点连通性验证脚本。
 7. `config/litellm-config.example.yaml`：LiteLLM 示例配置。
 8. `.vscode/mcp.example.json`：VS Code / GitHub Copilot 本地 MCP 示例配置。
+9. `assets/architecture-overview.svg`：整体架构图（LiteLLM 网关 + 多订阅 Foundry 供应池）。
+10. `assets/architecture-isolation-fallback.svg`：model_name 分组隔离与 fallback 顺序图。

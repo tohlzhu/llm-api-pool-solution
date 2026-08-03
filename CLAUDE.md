@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a solution design repository (not a runnable application) for a Chinese enterprise LLM API supply pool. The primary deliverable is `llm-api-pool-solution.md` — a Chinese-language architecture document describing a multi-subscription Azure Foundry + LiteLLM gateway setup serving ~1000 employees with Claude and GPT models.
 
-Supporting artifacts: `scripts/create-subscriptions.sh`, `scripts/deploy-models.sh`, `scripts/delete-resources.sh`, `scripts/test-endpoints.sh` (Azure CLI automation), `config/litellm-config.example.yaml` (LiteLLM proxy config), `.vscode/mcp.example.json` (VS Code MCP setup), `github-copilot-solution.md` (GitHub Copilot standalone guide).
+Supporting artifacts: `scripts/create-subscriptions.sh`, `scripts/deploy-models.sh`, `scripts/delete-resources.sh`, `scripts/test-endpoints.sh` (Azure CLI automation), `config/litellm-config.example.yaml` (LiteLLM proxy config), `.vscode/mcp.example.json` (VS Code MCP setup), `github-copilot-solution.md` (GitHub Copilot standalone guide), `assets/architecture-overview.svg` and `assets/architecture-isolation-fallback.svg` (architecture diagrams — English text only, must stay consistent with §4.2.1 and §5; validate with `scripts/check-svg.sh`).
 
 ## Validation Commands
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository is a Chinese enterprise solution package for a high-availability Claude/GPT API supply pool. The primary artifact is [llm-api-pool-solution.md](llm-api-pool-solution.md); supporting examples live in [config/litellm-config.example.yaml](config/litellm-config.example.yaml), [scripts/](scripts/) (create-subscriptions, deploy-models, delete-resources, test-endpoints), [.vscode/mcp.example.json](.vscode/mcp.example.json), and [github-copilot-solution.md](github-copilot-solution.md).
+This repository is a Chinese enterprise solution package for a high-availability Claude/GPT API supply pool. The primary artifact is [llm-api-pool-solution.md](llm-api-pool-solution.md); supporting examples live in [config/litellm-config.example.yaml](config/litellm-config.example.yaml), [scripts/](scripts/) (create-subscriptions, deploy-models, delete-resources, test-endpoints), [.vscode/mcp.example.json](.vscode/mcp.example.json), [github-copilot-solution.md](github-copilot-solution.md), and `assets/architecture-overview.svg` / `assets/architecture-isolation-fallback.svg` (architecture diagrams — English text only, must stay consistent with §4.2.1 and §5 of the main document; validate with `scripts/check-svg.sh`).
 
 ## Working Rules
 
