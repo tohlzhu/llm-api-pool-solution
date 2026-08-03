@@ -341,6 +341,6 @@
   </g>
 
   <!-- Footnote -->
-  <text class="lbl-muted" x="740" y="1050" text-anchor="middle">Region eastus2 · SKU GlobalStandard · one Foundry account per subscription: fdry-{prefix}-subNN / proj-{prefix}-subNN · names are placeholders</text>
+  <text class="lbl-muted" x="740" y="1050" text-anchor="middle">Region eastus2 · SKU GlobalStandard · one Foundry account per subscription: fdry-{subscription_name} / proj-{subscription_name} · names are placeholders</text>
   <text class="lbl-muted" x="740" y="1068" text-anchor="middle">Subscription names follow {prefix}-claude-subNN / {prefix}-gpt-subNN</text>
 </svg>
