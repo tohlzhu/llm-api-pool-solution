@@ -164,16 +164,25 @@ register_providers() {
 
   for provider in "${providers[@]}"; do
     local state
-    state="$(az provider show --namespace "$provider" --query "registrationState" -o tsv --only-show-errors 2>/dev/null || echo "NotRegistered")"
+    state="$(az provider show \
+      --namespace "$provider" \
+      --subscription "$subscription_id" \
+      --query "registrationState" -o tsv --only-show-errors 2>/dev/null || echo "NotRegistered")"
     if [[ "$state" == "Registered" ]]; then
       log "  $provider: already registered"
     else
       log "  Registering $provider..."
       if [[ "$DRY_RUN" != "true" ]]; then
-        az provider register --namespace "$provider" --only-show-errors
-        az provider register --namespace "$provider" --wait --only-show-errors 2>/dev/null || true
+        az provider register \
+          --namespace "$provider" \
+          --subscription "$subscription_id" \
+          --only-show-errors
+        az provider register \
+          --namespace "$provider" \
+          --subscription "$subscription_id" \
+          --wait --only-show-errors 2>/dev/null || true
       else
-        echo "[DRY-RUN] az provider register --namespace $provider" >&2
+        echo "[DRY-RUN] az provider register --namespace $provider --subscription $subscription_id" >&2
       fi
     fi
   done
@@ -193,16 +202,20 @@ create_foundry_resource() {
 
   # Create or reuse resource group
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az group create --name $resource_group --location $location" >&2
+    echo "[DRY-RUN] az group create --name $resource_group --subscription $subscription_id --location $location" >&2
   else
     local rg_exists
-    rg_exists="$(az group exists --name "$resource_group" --only-show-errors 2>/dev/null || echo "false")"
+    rg_exists="$(az group exists \
+      --name "$resource_group" \
+      --subscription "$subscription_id" \
+      --only-show-errors 2>/dev/null || echo "false")"
     if [[ "$rg_exists" == "true" ]]; then
       log "  Resource group already exists: $resource_group"
     else
       log "  Creating resource group: $resource_group (location: $location)"
       az group create \
         --name "$resource_group" \
+        --subscription "$subscription_id" \
         --location "$location" \
         --tags workload=llm-api-pool prefix="$prefix" model_type="$model_type" \
         --output none --only-show-errors
@@ -213,11 +226,13 @@ create_foundry_resource() {
     if az cognitiveservices account show \
       --name "$account_name" \
       --resource-group "$resource_group" \
+      --subscription "$subscription_id" \
       --output none --only-show-errors 2>/dev/null; then
       local project_management_enabled
       project_management_enabled="$(az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
+        --subscription "$subscription_id" \
         --query 'properties.allowProjectManagement' -o tsv --only-show-errors)"
       if [[ "$project_management_enabled" != "true" ]]; then
         echo "ERROR: Foundry resource $account_name does not have project management enabled and cannot host a Foundry project. Recreate it with --allow-project-management true." >&2
@@ -232,13 +247,15 @@ create_foundry_resource() {
   # Purge soft-deleted resource if name collides
   if [[ "$DRY_RUN" != "true" ]]; then
     local deleted_check
-    deleted_check="$(az cognitiveservices account list-deleted --only-show-errors \
+    deleted_check="$(az cognitiveservices account list-deleted \
+      --subscription "$subscription_id" --only-show-errors \
       --query "[?name=='${account_name}'].name" -o tsv 2>/dev/null || true)"
     if [[ -n "$deleted_check" ]]; then
       log "  Purging soft-deleted resource: $account_name"
       az cognitiveservices account purge \
         --name "$account_name" \
         --resource-group "$resource_group" \
+        --subscription "$subscription_id" \
         --location "$location" --only-show-errors 2>/dev/null || true
       sleep 5
     fi
@@ -246,11 +263,12 @@ create_foundry_resource() {
 
   log "  Creating Foundry resource: $account_name"
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az cognitiveservices account create --name $account_name --kind AIServices --sku S0 --allow-project-management true" >&2
+    echo "[DRY-RUN] az cognitiveservices account create --name $account_name --subscription $subscription_id --kind AIServices --sku S0 --allow-project-management true" >&2
   else
-    az cognitiveservices account create \
+    if ! az cognitiveservices account create \
       --name "$account_name" \
       --resource-group "$resource_group" \
+      --subscription "$subscription_id" \
       --location "$location" \
       --kind AIServices \
       --sku S0 \
@@ -258,7 +276,10 @@ create_foundry_resource() {
       --allow-project-management true \
       --assign-identity \
       --tags workload=llm-api-pool prefix="$prefix" model_type="$model_type" \
-      --output none --only-show-errors
+      --output none --only-show-errors; then
+      log "  ERROR: Failed to create Foundry resource $account_name in subscription $subscription_id"
+      return 1
+    fi
   fi
 
   # Assign Cognitive Services OpenAI User role to deploying user.
@@ -271,6 +292,7 @@ create_foundry_resource() {
         --assignee "$user_id" \
         --role "Cognitive Services OpenAI User" \
         --scope "$scope" \
+        --subscription "$subscription_id" \
         --only-show-errors --output none 2>/dev/null || true
     fi
   fi
@@ -279,20 +301,22 @@ create_foundry_resource() {
 }
 
 create_foundry_project() {
-  local account_name="$1"
-  local subscription_name="$2"
-  local resource_group="$3"
-  local location="$4"
+  local subscription_id="$1"
+  local account_name="$2"
+  local subscription_name="$3"
+  local resource_group="$4"
+  local location="$5"
   local project_name="proj-${subscription_name}"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az cognitiveservices account project create --name $account_name --project-name $project_name --location $location" >&2
+    echo "[DRY-RUN] az cognitiveservices account project create --name $account_name --subscription $subscription_id --project-name $project_name --location $location" >&2
     return 0
   fi
 
   if az cognitiveservices account project show \
     --name "$account_name" \
     --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
     --project-name "$project_name" \
     --output none --only-show-errors 2>/dev/null; then
     log "  Reusing existing Foundry project: $project_name"
@@ -303,6 +327,7 @@ create_foundry_project() {
   az cognitiveservices account project create \
     --name "$account_name" \
     --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
     --project-name "$project_name" \
     --location "$location" \
     --assign-identity \
@@ -310,9 +335,10 @@ create_foundry_project() {
 }
 
 get_endpoint() {
-  local account_name="$1"
-  local resource_group="$2"
-  local model_type="$3"
+  local subscription_id="$1"
+  local account_name="$2"
+  local resource_group="$3"
+  local model_type="$4"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     case "$model_type" in
@@ -328,26 +354,30 @@ get_endpoint() {
       az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
+        --subscription "$subscription_id" \
         --query 'properties.endpoints."AI Foundry API"' -o tsv --only-show-errors
       ;;
     gpt|gpt-luna)
       az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
+        --subscription "$subscription_id" \
         --query 'properties.endpoints."Azure OpenAI Legacy API - Latest moniker"' -o tsv --only-show-errors
       ;;
     *)
       az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
+        --subscription "$subscription_id" \
         --query properties.endpoint -o tsv --only-show-errors
       ;;
   esac
 }
 
 get_access_key() {
-  local account_name="$1"
-  local resource_group="$2"
+  local subscription_id="$1"
+  local account_name="$2"
+  local resource_group="$3"
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "dry-run-key-placeholder"
     return 0
@@ -358,6 +388,7 @@ get_access_key() {
     key="$(az cognitiveservices account keys list \
       --name "$account_name" \
       --resource-group "$resource_group" \
+      --subscription "$subscription_id" \
       --query key1 -o tsv --only-show-errors 2>/dev/null || true)"
     if [[ -n "$key" ]]; then
       echo "$key"
@@ -367,21 +398,25 @@ get_access_key() {
     sleep 5
   done
   log "  WARNING: Could not retrieve API key after retries, falling back to access token"
-  az account get-access-token --resource https://cognitiveservices.azure.com \
+  az account get-access-token \
+    --subscription "$subscription_id" \
+    --resource https://cognitiveservices.azure.com \
     --query accessToken -o tsv --only-show-errors 2>/dev/null || echo ""
 }
 
 # ---------- Deployment existence check ----------
 
 check_deployment_exists() {
-  local resource_group="$1"
-  local account_name="$2"
-  local deployment_name="$3"
+  local subscription_id="$1"
+  local resource_group="$2"
+  local account_name="$3"
+  local deployment_name="$4"
 
   local state
   state="$(az cognitiveservices account deployment show \
     --name "$account_name" \
     --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
     --deployment-name "$deployment_name" \
     --query "properties.provisioningState" -o tsv --only-show-errors 2>/dev/null || true)"
 
@@ -409,7 +444,7 @@ deploy_claude_model() {
   # Check if deployment already exists
   if [[ "$DRY_RUN" != "true" ]]; then
     local existing_state
-    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    existing_state="$(check_deployment_exists "$subscription_id" "$resource_group" "$account_name" "$deployment_name")"
     if [[ -n "$existing_state" ]]; then
       log "  $deployment_name: already exists (state=$existing_state), skipping"
       return 0
@@ -470,11 +505,12 @@ JSON
 }
 
 deploy_openai_model() {
-  local resource_group="$1"
-  local account_name="$2"
-  local model_name="$3"
-  local model_version="$4"
-  local tpm="$5"
+  local subscription_id="$1"
+  local resource_group="$2"
+  local account_name="$3"
+  local model_name="$4"
+  local model_version="$5"
+  local tpm="$6"
 
   local sku_capacity=$((tpm / 1000))
   local deployment_name="${model_name}"
@@ -482,7 +518,7 @@ deploy_openai_model() {
   # Check if deployment already exists
   if [[ "$DRY_RUN" != "true" ]]; then
     local existing_state
-    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    existing_state="$(check_deployment_exists "$subscription_id" "$resource_group" "$account_name" "$deployment_name")"
     if [[ -n "$existing_state" ]]; then
       log "  $deployment_name: already exists (state=$existing_state), skipping"
       return 0
@@ -492,13 +528,14 @@ deploy_openai_model() {
   log "  Deploying GPT: $deployment_name (version=$model_version, capacity=$sku_capacity)"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az cognitiveservices account deployment create --deployment-name $deployment_name --model-name $model_name" >&2
+    echo "[DRY-RUN] az cognitiveservices account deployment create --subscription $subscription_id --deployment-name $deployment_name --model-name $model_name" >&2
     return 0
   fi
 
   az cognitiveservices account deployment create \
     --name "$account_name" \
     --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
     --deployment-name "$deployment_name" \
     --model-name "$model_name" \
     --model-version "$model_version" \
@@ -512,11 +549,12 @@ deploy_openai_model() {
 }
 
 deploy_deepseek_model() {
-  local resource_group="$1"
-  local account_name="$2"
-  local model_name="$3"
-  local model_version="$4"
-  local tpm="$5"
+  local subscription_id="$1"
+  local resource_group="$2"
+  local account_name="$3"
+  local model_name="$4"
+  local model_version="$5"
+  local tpm="$6"
 
   local sku_capacity=$((tpm / 1000))
   local deployment_name="${model_name}"
@@ -524,7 +562,7 @@ deploy_deepseek_model() {
   # Check if deployment already exists
   if [[ "$DRY_RUN" != "true" ]]; then
     local existing_state
-    existing_state="$(check_deployment_exists "$resource_group" "$account_name" "$deployment_name")"
+    existing_state="$(check_deployment_exists "$subscription_id" "$resource_group" "$account_name" "$deployment_name")"
     if [[ -n "$existing_state" ]]; then
       log "  $deployment_name: already exists (state=$existing_state), skipping"
       return 0
@@ -534,13 +572,14 @@ deploy_deepseek_model() {
   log "  Deploying DeepSeek: $deployment_name (version=$model_version, capacity=$sku_capacity)"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY-RUN] az cognitiveservices account deployment create --deployment-name $deployment_name --model-name $model_name" >&2
+    echo "[DRY-RUN] az cognitiveservices account deployment create --subscription $subscription_id --deployment-name $deployment_name --model-name $model_name" >&2
     return 0
   fi
 
   az cognitiveservices account deployment create \
     --name "$account_name" \
     --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
     --deployment-name "$deployment_name" \
     --model-name "$model_name" \
     --model-version "$model_version" \
@@ -626,7 +665,9 @@ main() {
     log "=== Processing: $subscription_name (sub=$subscription_id, type=$model_type) ==="
 
     # Wrap per-subscription work so failures don't kill the loop
-    if ! (
+    local subscription_status
+    set +e
+    (
       set -euo pipefail
 
       # Set subscription context
@@ -650,10 +691,10 @@ main() {
       log "  Foundry resource: $account_name"
 
       local resource_group="rg-foundry"
-      create_foundry_project "$account_name" "$subscription_name" "$resource_group" "$location"
+      create_foundry_project "$subscription_id" "$account_name" "$subscription_name" "$resource_group" "$location"
 
       local endpoint
-      endpoint="$(get_endpoint "$account_name" "$resource_group" "$model_type")"
+      endpoint="$(get_endpoint "$subscription_id" "$account_name" "$resource_group" "$model_type")"
 
       # Deploy models based on model_type
       local models_list=""
@@ -670,7 +711,7 @@ main() {
 
       # Get access key once per account (shared across all deployments)
       local access_key
-      access_key="$(get_access_key "$account_name" "$resource_group")"
+      access_key="$(get_access_key "$subscription_id" "$account_name" "$resource_group")"
 
       IFS=',' read -ra models <<< "$models_list"
       for model_entry in "${models[@]}"; do
@@ -685,10 +726,10 @@ main() {
               "$m_name" "$m_version" "$tpm" "$anthropic_org" "$anthropic_industry" "$anthropic_country"
             ;;
           gpt|gpt-luna)
-            deploy_openai_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
+            deploy_openai_model "$subscription_id" "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
             ;;
           deepseek)
-            deploy_deepseek_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
+            deploy_deepseek_model "$subscription_id" "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
             ;;
         esac
 
@@ -704,7 +745,11 @@ main() {
           "$subscription_name" "$model_endpoint" "$m_name" "$model_type" "$access_key" \
           >> "$output_csv"
       done
-    ); then
+    )
+    subscription_status=$?
+    set -e
+
+    if [[ "$subscription_status" -ne 0 ]]; then
       log "  ERROR: Subscription $subscription_name had failures, continuing with next..."
       fail_count=$((fail_count + 1))
       continue
