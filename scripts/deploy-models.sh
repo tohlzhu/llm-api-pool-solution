@@ -20,7 +20,8 @@ ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 # Format: model_name|version (comma-separated per type)
 
 CLAUDE_MODELS="claude-opus-4-8|2,claude-sonnet-5|2,claude-haiku-4-5|2"
-GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.6-terra|2026-07-09,gpt-5.6-sol|2026-07-09,gpt-5.6-luna|2026-07-09"
+# GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.6-terra|2026-07-09,gpt-5.6-sol|2026-07-09,gpt-5.6-luna|2026-07-09"
+GPT_MODELS="gpt-5.6-luna|2026-07-09"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 
 # Default TPM per model (used when --tpm not specified)
