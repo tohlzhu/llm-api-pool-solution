@@ -33,6 +33,7 @@ Options:
   -p, --prefix PREFIX           Naming prefix (default: llmpool)
       --claude                  Model type: Claude (last specified wins)
       --gpt                     Model type: GPT (last specified wins)
+      --gpt-luna                Model type: GPT Luna (last specified wins)
       --deepseek                Model type: DeepSeek (last specified wins)
       --anthropic-org NAME      Claude organizationName (default: Contoso Pte.Ltd)
       --anthropic-industry V    Claude industry (default: Manufacturing)
@@ -44,7 +45,7 @@ Options:
       --dry-run                 Print actions without executing
   -h, --help                    Show this help
 
-At least one model type must be specified: --claude, --gpt, or --deepseek.
+At least one model type must be specified: --claude, --gpt, --gpt-luna or --deepseek.
 If multiple are specified, the last one wins (one subscription batch = one model type).
 
 Billing scope format (full ARM resource ID):
@@ -68,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     -p|--prefix)             PREFIX="$2"; shift 2 ;;
     --claude)                MODEL_TYPE="claude"; shift ;;
     --gpt)                   MODEL_TYPE="gpt"; shift ;;
+    --gpt-luna)              MODEL_TYPE="gpt-luna"; shift ;;
     --deepseek)              MODEL_TYPE="deepseek"; shift ;;
     --anthropic-org)         ANTHROPIC_ORG="$2"; shift 2 ;;
     --anthropic-industry)    ANTHROPIC_INDUSTRY="$2"; shift 2 ;;
@@ -85,7 +87,7 @@ done
 # ---------- Validation ----------
 
 if [[ -z "$MODEL_TYPE" ]]; then
-  echo "ERROR: Model type is required (--claude, --gpt, or --deepseek)" >&2
+  echo "ERROR: Model type is required (--claude, --gpt, --gpt-luna or --deepseek)" >&2
   exit 1
 fi
 

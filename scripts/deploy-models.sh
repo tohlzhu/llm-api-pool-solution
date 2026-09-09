@@ -20,8 +20,8 @@ ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 # Format: model_name|version (comma-separated per type)
 
 CLAUDE_MODELS="claude-opus-4-8|2,claude-sonnet-5|2,claude-haiku-4-5|2"
-# GPT_MODELS="gpt-5.5|2026-04-24,gpt-5.6-terra|2026-07-09,gpt-5.6-sol|2026-07-09,gpt-5.6-luna|2026-07-09"
-GPT_MODELS="gpt-5.6-luna|2026-07-09"
+GPT_MODELS="gpt-5.6-sol|2026-07-09,gpt-5.6-terra|2026-07-09,gpt-5.6-luna|2026-07-09,gpt-6-astra|2026-09-03"
+GPT_LUNA_MODELS="gpt-5.6-luna|2026-07-09"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 
 # Default TPM per model (used when --tpm not specified)
@@ -29,10 +29,10 @@ declare -A DEFAULT_TPM=(
   [claude-opus-4-8]=2000000
   [claude-sonnet-5]=2000000
   [claude-haiku-4-5]=4000000
-  [gpt-5.5]=10000000
-  [gpt-5.6-terra]=10000000
   [gpt-5.6-sol]=10000000
+  [gpt-5.6-terra]=10000000
   [gpt-5.6-luna]=10000000
+  [gpt-6-astra]=10000000
   [DeepSeek-V4-Pro]=10000000
   [DeepSeek-V4-Flash]=10000000
 )
@@ -317,8 +317,8 @@ get_endpoint() {
   if [[ "$DRY_RUN" == "true" ]]; then
     case "$model_type" in
       claude|deepseek) echo "https://${account_name}.services.ai.azure.com/" ;;
-      gpt)            echo "https://${account_name}.openai.azure.com/" ;;
-      *)              echo "https://${account_name}.cognitiveservices.azure.com/" ;;
+      gpt|gpt-luna)    echo "https://${account_name}.openai.azure.com/" ;;
+      *)               echo "https://${account_name}.cognitiveservices.azure.com/" ;;
     esac
     return 0
   fi
@@ -330,7 +330,7 @@ get_endpoint() {
         --resource-group "$resource_group" \
         --query 'properties.endpoints."AI Foundry API"' -o tsv --only-show-errors
       ;;
-    gpt)
+    gpt|gpt-luna)
       az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
@@ -660,6 +660,7 @@ main() {
       case "$model_type" in
         claude)   models_list="$CLAUDE_MODELS" ;;
         gpt)      models_list="$GPT_MODELS" ;;
+        gpt-luna) models_list="$GPT_LUNA_MODELS" ;;
         deepseek) models_list="$DEEPSEEK_MODELS" ;;
         *)
           log "WARNING: Unknown model_type '$model_type', skipping"
@@ -683,7 +684,7 @@ main() {
             deploy_claude_model "$subscription_id" "$resource_group" "$account_name" \
               "$m_name" "$m_version" "$tpm" "$anthropic_org" "$anthropic_industry" "$anthropic_country"
             ;;
-          gpt)
+          gpt|gpt-luna)
             deploy_openai_model "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
             ;;
           deepseek)
@@ -695,7 +696,7 @@ main() {
         local model_endpoint
         case "$model_type" in
           claude)   model_endpoint="${endpoint%/}/anthropic/v1/messages" ;;
-          gpt)      model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
+          gpt|gpt-luna)      model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
           deepseek) model_endpoint="${endpoint%/}/v1/chat/completions" ;;
           *)        model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
         esac
