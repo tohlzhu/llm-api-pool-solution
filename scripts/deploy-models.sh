@@ -59,8 +59,21 @@ Input CSV format (from create-subscriptions.sh):
   anthropic-org, anthropic-industry, anthropic-country
 
 Output:
-  \$OUT_DIR/foundry-endpoints.csv — columns:
+  \$OUT_DIR/foundry-endpoints-<batch>.csv (OUT_DIR defaults to ./generated) — columns:
     subscription_name, model_endpoint, model_name, model_type, access_key
+
+The batch name comes from the input filename:
+  subscriptions-code01.csv -> foundry-endpoints-code01.csv
+  custom-batch.csv         -> foundry-endpoints-custom-batch.csv
+  subscriptions.csv        -> foundry-endpoints.csv (legacy)
+Use distinct input basenames and non-overlapping subscriptions for parallel batches.
+Existing inventories are regenerated; concurrent writers to the same CSV are rejected.
+Requires flock (util-linux). Keep the .lock file; the lock releases on exit.
+Run test-endpoints.sh on the matching inventory only after deployment finishes.
+
+Example:
+  $(basename "$0") --input ./generated/subscriptions-code01.csv
+  scripts/test-endpoints.sh ./generated/foundry-endpoints-code01.csv
 EOF
   exit 1
 }
@@ -111,12 +124,14 @@ resolve_anthropic_params() {
 
   if [[ -z "$_org" ]]; then
     _org="$(az rest --method get \
+      --subscription "$subscription_id" \
       --url "https://management.azure.com/tenants?api-version=2022-12-01" \
       --query "value[?tenantId=='${home_tenant}'].displayName | [0]" -o tsv --only-show-errors 2>/dev/null || true)"
   fi
 
   if [[ -z "$_country" ]]; then
     _country="$(az rest --method get \
+      --subscription "$subscription_id" \
       --url "https://management.azure.com/tenants?api-version=2022-12-01" \
       --query "value[?tenantId=='${home_tenant}'].countryCode | [0]" -o tsv --only-show-errors 2>/dev/null || true)"
   fi
@@ -285,7 +300,7 @@ create_foundry_resource() {
   # Assign Cognitive Services OpenAI User role to deploying user.
   if [[ "$DRY_RUN" != "true" ]]; then
     local user_id
-    user_id="$(az ad signed-in-user show --query id -o tsv --only-show-errors 2>/dev/null || true)"
+    user_id="$(az ad signed-in-user show --subscription "$subscription_id" --query id -o tsv --only-show-errors 2>/dev/null || true)"
     if [[ -n "$user_id" ]]; then
       local scope="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${account_name}"
       az role assignment create \
@@ -481,7 +496,7 @@ JSON
 
   local url="https://management.azure.com/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${account_name}/deployments/${deployment_name}?api-version=${ANTHROPIC_API_VERSION}"
 
-  az rest --only-show-errors --method put --url "$url" --body "$body" --output none 2>&1 || {
+  az rest --subscription "$subscription_id" --only-show-errors --method put --url "$url" --body "$body" --output none 2>&1 || {
     log "  WARNING: Failed to deploy $deployment_name (may require Marketplace acceptance or quota)"
     return 0
   }
@@ -489,7 +504,7 @@ JSON
   log "  Waiting for $deployment_name..."
   local state=""
   for _ in $(seq 1 30); do
-    state="$(az rest --only-show-errors --method get --url "$url" \
+    state="$(az rest --subscription "$subscription_id" --only-show-errors --method get --url "$url" \
       --query "properties.provisioningState" -o tsv 2>/dev/null || echo "Unknown")"
     if [[ "$state" == "Succeeded" ]]; then
       log "  $deployment_name: Succeeded"
@@ -596,6 +611,25 @@ deploy_deepseek_model() {
 
 main() {
   require_command az
+  require_command flock
+
+  local input_name="${INPUT_FILE##*/}"
+  local batch_name="${input_name%.csv}"
+  local output_csv
+  if [[ "$input_name" == "subscriptions.csv" ]]; then
+    output_csv="${OUT_DIR}/foundry-endpoints.csv"
+  else
+    batch_name="${batch_name#subscriptions-}"
+    if [[ -z "$batch_name" ]]; then
+      echo "ERROR: Cannot derive a batch name from input filename: $INPUT_FILE" >&2
+      exit 1
+    fi
+    output_csv="${OUT_DIR}/foundry-endpoints-${batch_name}.csv"
+  fi
+  if [[ "$INPUT_FILE" -ef "$output_csv" ]]; then
+    echo "ERROR: Input and output must be different files: $output_csv" >&2
+    exit 1
+  fi
 
   log "Validating Azure CLI login..."
   az account show --output none --only-show-errors
@@ -605,6 +639,7 @@ main() {
   log "TPM override:   ${TPM_OVERRIDE:-<default per model>}"
   log "Dry run:        $DRY_RUN"
   log "Output dir:     $OUT_DIR"
+  log "Inventory file: $output_csv"
   log "========================"
 
   # Pre-read CSV to collect subscriptions for confirmation
@@ -652,7 +687,12 @@ main() {
 
   mkdir -p "$OUT_DIR"
 
-  local output_csv="${OUT_DIR}/foundry-endpoints.csv"
+  local output_lock_fd
+  exec {output_lock_fd}>>"${output_csv}.lock"
+  if ! flock -n "$output_lock_fd"; then
+    echo "ERROR: Another process is writing $output_csv; use a different batch name or wait for it to finish." >&2
+    exit 1
+  fi
   printf "subscription_name,model_endpoint,model_name,model_type,access_key\n" > "$output_csv"
 
   local success_count=0
@@ -670,13 +710,7 @@ main() {
     (
       set -euo pipefail
 
-      # Set subscription context
-      if [[ "$DRY_RUN" != "true" ]]; then
-        az account set --subscription "$subscription_id" --only-show-errors
-      else
-        echo "[DRY-RUN] az account set --subscription $subscription_id" >&2
-      fi
-
+      # Pass --subscription explicitly; the CLI default is shared across shells.
       # Auto-resolve Anthropic parameters from tenant if not specified in CSV
       if [[ "$model_type" == "claude" ]]; then
         resolve_anthropic_params "$subscription_id" anthropic_org anthropic_industry anthropic_country
@@ -766,6 +800,7 @@ main() {
     log "  $count model endpoints recorded"
   fi
   log "  Subscriptions: $success_count succeeded, $fail_count failed (of ${#sub_entries[@]} total)"
+  log "Next step: scripts/test-endpoints.sh $output_csv"
 }
 
 main "$@"

@@ -57,9 +57,18 @@ Billing scope format (full ARM resource ID):
   Portal: Cost Management + Billing -> Billing scopes / Invoice sections -> Properties -> ID
 
 Output:
-  \$OUT_DIR/subscriptions.csv — columns:
+  \$OUT_DIR/subscriptions-<prefix>.csv (OUT_DIR defaults to ./generated) — columns:
     subscription_id, subscription_name, prefix, model_type, location,
     anthropic-org, anthropic-industry, anthropic-country
+
+Use a distinct prefix for each parallel batch (including different regions).
+Existing CSVs are appended to; concurrent writers to the same CSV are rejected.
+Requires flock (util-linux). Keep the .lock file; the lock releases on exit.
+
+Example:
+  $(basename "$0") --prefix code01 --gpt --billing-scope "\$BILLING_SCOPE"
+  scripts/deploy-models.sh --input ./generated/subscriptions-code01.csv
+  scripts/test-endpoints.sh ./generated/foundry-endpoints-code01.csv
 EOF
   exit 1
 }
@@ -93,6 +102,11 @@ fi
 
 if [[ -z "$BILLING_SCOPE" ]]; then
   echo "ERROR: --billing-scope is required" >&2
+  exit 1
+fi
+
+if [[ -z "$PREFIX" || "$PREFIX" == */* ]]; then
+  echo "ERROR: --prefix must be non-empty and must not contain '/' (used in the output filename)" >&2
   exit 1
 fi
 
@@ -217,6 +231,16 @@ move_to_management_group() {
 
 main() {
   require_command az
+  require_command flock
+
+  mkdir -p "$OUT_DIR"
+  local csv_file="${OUT_DIR}/subscriptions-${PREFIX}.csv"
+  local output_lock_fd
+  exec {output_lock_fd}>>"${csv_file}.lock"
+  if ! flock -n "$output_lock_fd"; then
+    echo "ERROR: Another process is writing $csv_file; use a different prefix or wait for it to finish." >&2
+    exit 1
+  fi
 
   log "Validating Azure CLI login..."
   az account show --output none --only-show-errors
@@ -232,11 +256,8 @@ main() {
   log "Anthropic ctry:   $ANTHROPIC_COUNTRY"
   log "Dry run:          $DRY_RUN"
   log "Output dir:       $OUT_DIR"
+  log "Parameter file:   $csv_file"
   log "============================="
-
-  mkdir -p "$OUT_DIR"
-
-  local csv_file="${OUT_DIR}/subscriptions.csv"
 
   # Append mode: create header only if file doesn't exist or is empty
   if [[ ! -s "$csv_file" ]]; then
