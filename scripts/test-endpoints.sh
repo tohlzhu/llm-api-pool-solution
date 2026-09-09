@@ -24,13 +24,16 @@ Arguments:
 
 Options:
   -i, --input FILE    Input CSV file (alternative to positional arg)
-      --verbose       Show full response body
+      --verbose       Show full response body and request timings
   -h, --help          Show this help
 
 Environment variables:
   MAX_TOKENS    Max tokens for test request (default: 50)
-  TIMEOUT       Curl timeout in seconds (default: 30)
-  VERBOSE       Show full response body (default: false)
+  TIMEOUT       Curl total request timeout in seconds (default: 30)
+  VERBOSE       Show full response body and timings (default: false)
+
+Curl failures always show the exit code, available HTTP status and timings.
+Timings are cumulative seconds from request start; requests are not retried.
 
 Input CSV format (from deploy-models.sh):
   subscription_name, model_endpoint, model_name, model_type, access_key
@@ -102,6 +105,35 @@ get_auth_header() {
 
 # ---------- Test functions ----------
 
+request_endpoint() {
+  local model_name="$1"
+  shift
+
+  local response
+  local curl_exit=0
+  response="$(curl -sS -w '\n%{http_code}\nTiming(s): dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} first_byte=%{time_starttransfer} total=%{time_total}' \
+    --max-time "$TIMEOUT" "$@")" || curl_exit=$?
+
+  local timings="Timing(s): unavailable"
+  local http_code="unavailable"
+  if [[ "$response" == *$'\nTiming(s): '* ]]; then
+    timings="${response##*$'\n'}"
+    response="${response%$'\n'*}"
+    http_code="${response##*$'\n'}"
+  fi
+
+  if [[ "$curl_exit" -ne 0 ]]; then
+    printf '  FAIL: %s (curl exit %s; HTTP %s)\n' "$model_name" "$curl_exit" "$http_code" >&2
+    printf '  %s (TIMEOUT=%ss)\n' "$timings" "$TIMEOUT" >&2
+    return 1
+  fi
+
+  if [[ "$VERBOSE" == "true" ]]; then
+    printf '  %s\n' "$timings" >&2
+  fi
+  printf '%s\n' "$response"
+}
+
 test_claude() {
   local endpoint="$1"
   local model_name="$2"
@@ -110,8 +142,7 @@ test_claude() {
   local url="${endpoint%/}"
 
   local response
-  response="$(curl -s -w "\n%{http_code}" \
-    --max-time "$TIMEOUT" \
+  response="$(request_endpoint "$model_name" \
     "$url" \
     -H "x-api-key: ${api_key}" \
     -H "anthropic-version: 2023-06-01" \
@@ -120,10 +151,7 @@ test_claude() {
       \"model\": \"${model_name}\",
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_tokens\": ${MAX_TOKENS}
-    }" 2>/dev/null)" || {
-    echo "  FAIL: $model_name (connection error)"
-    return 1
-  }
+    }")" || return 1
 
   local http_code
   http_code="$(echo "$response" | tail -1)"
@@ -162,18 +190,14 @@ test_openai() {
   auth_header="$(get_auth_header "$api_key")"
 
   local response
-  response="$(curl -s -w "\n%{http_code}" \
-    --max-time "$TIMEOUT" \
+  response="$(request_endpoint "$model_name" \
     "$url" \
     -H "${auth_header}" \
     -H "Content-Type: application/json" \
     -d "{
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_completion_tokens\": ${MAX_TOKENS}
-    }" 2>/dev/null)" || {
-    echo "  FAIL: $model_name (connection error)"
-    return 1
-  }
+    }")" || return 1
 
   local http_code
   http_code="$(echo "$response" | tail -1)"
@@ -206,8 +230,7 @@ test_deepseek() {
   auth_header="$(get_auth_header "$api_key")"
 
   local response
-  response="$(curl -s -w "\n%{http_code}" \
-    --max-time "$TIMEOUT" \
+  response="$(request_endpoint "$model_name" \
     "$url" \
     -H "${auth_header}" \
     -H "Content-Type: application/json" \
@@ -215,10 +238,7 @@ test_deepseek() {
       \"model\": \"${model_name}\",
       \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}],
       \"max_tokens\": ${MAX_TOKENS}
-    }" 2>/dev/null)" || {
-    echo "  FAIL: $model_name (connection error)"
-    return 1
-  }
+    }")" || return 1
 
   local http_code
   http_code="$(echo "$response" | tail -1)"

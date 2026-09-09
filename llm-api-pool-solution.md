@@ -420,9 +420,21 @@ VERBOSE=true scripts/test-endpoints.sh \
 # 测试所有端点
 scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 
-# 显示完整响应
+# 显示完整响应及请求耗时
 VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 ```
+
+脚本默认每个端点只请求一次，不自动重试；`TIMEOUT` 默认 30 秒，限制的是 DNS、连接、TLS、服务端处理及完整响应接收的**总时间**，而非仅建立连接的时间。Portal 测试成功不代表脚本使用相同的网络路径、等待时间或请求参数。
+
+curl 执行失败时，无论是否开启 `VERBOSE`，均向 stderr 输出 curl 原始错误、退出码、已获得的 HTTP 状态及耗时，不再将所有失败统称为 `connection error`。诊断不启用 curl 的 verbose/trace 模式，不输出请求认证头；`VERBOSE=true` 时，正常完成传输的请求也会显示耗时。
+
+| 诊断字段 | 含义 |
+|---|---|
+| `curl exit` | 常见退出码：`5` 代理解析失败、`6` 主机解析失败、`7` 连接失败、`28` 超时、`35` TLS 握手失败、`60` 证书校验失败、`56` 接收数据失败；结合原始错误定位，不单凭退出码推断根因。 |
+| `HTTP` | curl 已获得的 HTTP 状态；`000` 表示未获得 HTTP 响应状态，`unavailable` 表示未取得诊断元数据。即使已收到 HTTP 200，响应未完整接收且 curl 非零退出时仍判失败。 |
+| `Timing(s)` | `dns`、`connect`、`tls`、`first_byte`、`total` 分别为解析完成、连接建立、TLS 完成、首字节到达、请求结束相对请求开始的**累计秒数**，不是各阶段独立耗时。未完成或不适用的阶段可能为 0；代理或重定向会影响解读。 |
+
+若出现 `curl exit 28` 且 `total` 接近 `TIMEOUT`，说明触发了超时；需结合连接及首字节时间进一步判断等待发生在哪里，不能直接认定端点不可连接。HTTP 4xx/5xx 与 curl 传输错误分别报告，超时不自动视为成功。
 
 ### 7.6 注意事项
 
