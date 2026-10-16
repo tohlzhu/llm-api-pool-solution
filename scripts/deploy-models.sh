@@ -20,7 +20,7 @@ ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 # Format: model_name|version (comma-separated per type)
 
 CLAUDE_MODELS="claude-opus-4-8|2,claude-sonnet-5|2,claude-haiku-4-5|2"
-GPT_MODELS="gpt-5.6-sol|2026-07-09,gpt-5.6-terra|2026-07-09,gpt-5.6-luna|2026-07-09,gpt-6-astra|2026-09-03,gpt-6-sol|2026-09-22,gpt-6-luna|2026-09-22"
+GPT_MODELS="gpt-5.6-sol|2026-07-09,gpt-5.6-terra|2026-07-09,gpt-5.6-luna|2026-07-09,gpt-6-astra|2026-09-03,gpt-6-sol|2026-09-22,gpt-6.1-sol|2026-09-29,gpt-6-luna|2026-09-22"
 GPT_LUNA_MODELS="gpt-5.6-luna|2026-07-09,gpt-6-luna|2026-09-22"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
 
@@ -34,6 +34,7 @@ declare -A DEFAULT_TPM=(
   [gpt-5.6-luna]=10000000
   [gpt-6-astra]=10000000
   [gpt-6-sol]=10000000
+  [gpt-6.1-sol]=10000000
   [gpt-6-luna]=10000000
   [DeepSeek-V4-Pro]=10000000
   [DeepSeek-V4-Flash]=10000000
