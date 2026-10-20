@@ -34,7 +34,7 @@ declare -A NON_LLM_SPEC=(
   [gpt-image-2.5-sunburst]="gpt-image-2.5-sunburst|OpenAI|GlobalStandard|10" # 10 RPM
   [gpt-image-2.5-flare]="gpt-image-2.5-flare|OpenAI|GlobalStandard|10"       # 10 RPM
   [gpt-live-1]="gpt-live-1|OpenAI|GlobalStandard|10"                         # 10K TPM
-  [Decision-1]="Microsoft-Decision-1|Microsoft|GlobalStandard|10"            # 10 RPM
+  [Decision-1]="Microsoft-Decision-1|Microsoft|DataZoneStandard|500"            # 500 RPM
 )
 
 # Default TPM per model (used when --tpm not specified)
