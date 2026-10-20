@@ -326,6 +326,11 @@ main() {
           failed=$((failed + 1))
         fi
         ;;
+      non-llm)
+        # Image, realtime and decision APIs do not accept chat-completion probes.
+        echo "  SKIP: No connectivity test for non-LLM models"
+        skipped=$((skipped + 1))
+        ;;
       *)
         if test_openai "$model_endpoint" "$model_name" "$access_key"; then
           passed=$((passed + 1))

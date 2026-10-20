@@ -292,8 +292,8 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 - **[scripts/create-subscriptions.sh](scripts/create-subscriptions.sh)**：第一阶段，创建 Azure 订阅并输出参数 CSV 文件。需要 EA/MCA billing scope 权限。
   - 用户自行决定在 prefix 参数加入 claude/gpt/ds 字样区分一批订阅将要创建的模型类别，如 `llmpool-claude`，脚本本身不依赖于此逻辑工作，prefix 本身不输出到 CSV；
   - 用户指定 prefix 用于命名订阅、foundry 实例，prefix 在输出 CSV 占一列；
-  - 支持正向选择模型类型（model_type, 用参数 `--claude`、`--gpt`、`--deepseek` 激活），指定多个时只有最后一个生效，确保一个订阅中只有一类模型；生效选项在 CSV 中占一列；
-  - 订阅名规则为 `{prefix}-{claude|gpt|deepseek}-sub{N}`;
+  - 支持正向选择模型类型（model_type, 用参数 `--claude`、`--gpt`、`--deepseek`、`--non-llm` 激活），指定多个时只有最后一个生效，确保一个订阅中只有一类模型；生效选项在 CSV 中占一列；
+  - 订阅名规则为 `{prefix}-{claude|gpt|deepseek|non-llm}-sub{N}`;
   - 所属管理组为可选参数；location 默认 eastus2；
   - **幂等**：已存在的订阅（按名称匹配）自动跳过创建，支持重复执行以增量补充；
 - **[scripts/deploy-models.sh](scripts/deploy-models.sh)**：第二阶段，基于参数 CSV 在各订阅下创建 resource group 和 Foundry 资源并部署模型端点。
@@ -326,7 +326,7 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 3. 在模型部署前使用 `az cognitiveservices account project create` 创建或复用 `proj-{subscription_name}`；若已有 account 未启用 project management，停止该订阅的部署并提示重建，不能静默绕过。
 4. 按 model_type 部署对应类型的模型端点，当前脚本固定使用 `GlobalStandard` deployment SKU（从 CSV 获取 anthropic 有关参数）。
 5. Claude 模型通过 REST API（api-version `2025-10-01-preview`）部署，包含 `modelProviderData`（organizationName、industry、countryCode，取自 CSV 的 anthropic-org, anthropic-industry, anthropic-country）。
-6. GPT 和 DeepSeek 模型通过 `az cognitiveservices account deployment create` 部署。
+6. GPT、DeepSeek 和非 LLM 模型通过 `az cognitiveservices account deployment create` 部署；非 LLM 模型的 model name、format、SKU 和 capacity 取自脚本内 `NON_LLM_SPEC`。
 7. 输出端点、模型名称、访问密钥清单 CSV `./generated/foundry-endpoints.csv`，包含字段 `model_endpoint, model_name, access_key`。
 
 ### 7.2 支持的模型
@@ -336,6 +336,9 @@ LiteLLM 的 PostgreSQL 数据库适合作为在线控制面和近期审计查询
 | Claude | claude-opus-4-8, claude-sonnet-5, claude-haiku-4-5 | Anthropic | 1, 1, 20251001 |
 | GPT | gpt-5.5, gpt-5.6-terra, gpt-5.6-sol, gpt-5.6-luna | OpenAI | 2026-04-24, 2026-07-09, 2026-07-09, 2026-07-09 |
 | DeepSeek | DeepSeek-V4-Pro, DeepSeek-V4-Flash | DeepSeek | 2026-04-23, 2026-04-23 |
+| 非 LLM（`--non-llm`） | gpt-image-2, gpt-image-2.5-sunburst, gpt-image-2.5-flare, gpt-live-1, Decision-1（模型 Microsoft-Decision-1） | OpenAI（前四个）, Microsoft | 2026-04-21, 2026-09-08, 2026-09-08, 2026-09-10, 1 |
+
+非 LLM 模型的 capacity 按 SKU 单位设定，不受 `--tpm` 影响：gpt-image-* 与 Decision-1 为 1 单位 = 1 RPM（各 10 RPM），gpt-live-1 为 1 单位 = 1K TPM（10K TPM）。清单中 gpt-image-* / gpt-live-1 记录 `/openai/deployments/{deployment}`，Decision-1 记录 `/providers/microsoft/v1/systemone`（请求体 `model` 填 deployment 名）。
 
 ### 7.3 命令行用法
 
@@ -385,6 +388,7 @@ VERBOSE=true scripts/test-endpoints.sh \
 | `--claude` | 部署 Claude 模型 | — |
 | `--gpt` | 部署 GPT 模型 | — |
 | `--deepseek` | 部署 DeepSeek 模型 | — |
+| `--non-llm` | 部署非 LLM 模型（图像、实时语音、决策） | — |
 | `--anthropic-org` | Claude 模型创建参数 organizationName | `Contoso Pte.Ltd` |
 | `--anthropic-industry` | Claude 模型创建参数 industry | `manufacturing` |
 | `--anthropic-country` | Claude 模型创建参数 countryCode | `SG` |
@@ -399,7 +403,7 @@ VERBOSE=true scripts/test-endpoints.sh \
 | 参数 | 说明 | 默认值 |
 | --- | --- | --- |
 | `-i, --input` | 输入 CSV 文件 | `./generated/subscriptions.csv` |
-| `-t, --tpm` | 默认 TPM（可选，测试时指定低配额） | — |
+| `-t, --tpm` | 默认 TPM（可选，测试时指定低配额；不作用于非 LLM 模型） | — |
 | `--force` | 跳过确认 | — |
 | `--dry-run` | 仅打印操作 | — |
 
@@ -424,7 +428,7 @@ scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 VERBOSE=true scripts/test-endpoints.sh ./generated/foundry-endpoints.csv
 ```
 
-脚本默认每个端点只请求一次，不自动重试；`TIMEOUT` 默认 30 秒，限制的是 DNS、连接、TLS、服务端处理及完整响应接收的**总时间**，而非仅建立连接的时间。Portal 测试成功不代表脚本使用相同的网络路径、等待时间或请求参数。
+`model_type=non-llm` 的端点（图像、实时语音、决策 API）不支持 chat completion 探测，脚本计为 SKIP。脚本默认每个端点只请求一次，不自动重试；`TIMEOUT` 默认 30 秒，限制的是 DNS、连接、TLS、服务端处理及完整响应接收的**总时间**，而非仅建立连接的时间。Portal 测试成功不代表脚本使用相同的网络路径、等待时间或请求参数。
 
 curl 执行失败时，无论是否开启 `VERBOSE`，均向 stderr 输出 curl 原始错误、退出码、已获得的 HTTP 状态及耗时，不再将所有失败统称为 `connection error`。诊断不启用 curl 的 verbose/trace 模式，不输出请求认证头；`VERBOSE=true` 时，正常完成传输的请求也会显示耗时。
 
@@ -449,6 +453,7 @@ curl 执行失败时，无论是否开启 `VERBOSE`，均向 stderr 输出 curl 
 9. **所有脚本支持重复执行（幂等）**：`create-subscriptions.sh` 跳过已存在订阅；`deploy-models.sh` 复用已有资源组、按订阅名确定的 Foundry account/project，并跳过已部署模型；适合增量开通新模型。
 10. 单个订阅的部署失败不会中断整批处理，脚本继续执行后续订阅并在结束时报告成功/失败统计。
 11. GPT-5.6 Sol、Terra、Luna 均为 Preview。部署前须在目标订阅验证 phased rollout 准入、模型/区域可用性、配额和 API 版本；生产变更须遵循 Preview 生命周期和回滚策略。
+12. 非 LLM 模型的订阅默认配额可能低于脚本设定的 capacity（例如 gpt-image-* 默认配额可能只有 2 RPM），部署前用 `az cognitiveservices usage list -l <region>` 核验并按需申请配额，否则该部署会以 WARNING 跳过。Microsoft-Decision-1 为 Preview，支持 GlobalStandard 与部分区域的 DataZoneStandard；需要数据区内处理时，将 `NON_LLM_SPEC` 中的 SKU 改为 `DataZoneStandard`。
 
 ### 7.7 实际命令举例
 

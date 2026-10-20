@@ -35,6 +35,7 @@ Options:
       --gpt                     Model type: GPT (last specified wins)
       --gpt-luna                Model type: GPT Luna (last specified wins)
       --deepseek                Model type: DeepSeek (last specified wins)
+      --non-llm                 Model type: non-LLM (image, realtime, decision; last specified wins)
       --anthropic-org NAME      Claude organizationName (default: Contoso Pte.Ltd)
       --anthropic-industry V    Claude industry (default: Manufacturing)
       --anthropic-country CC    Claude countryCode (default: SG)
@@ -45,7 +46,7 @@ Options:
       --dry-run                 Print actions without executing
   -h, --help                    Show this help
 
-At least one model type must be specified: --claude, --gpt, --gpt-luna or --deepseek.
+At least one model type must be specified: --claude, --gpt, --gpt-luna, --deepseek or --non-llm.
 If multiple are specified, the last one wins (one subscription batch = one model type).
 
 Billing scope format (full ARM resource ID):
@@ -80,6 +81,7 @@ while [[ $# -gt 0 ]]; do
     --gpt)                   MODEL_TYPE="gpt"; shift ;;
     --gpt-luna)              MODEL_TYPE="gpt-luna"; shift ;;
     --deepseek)              MODEL_TYPE="deepseek"; shift ;;
+    --non-llm)               MODEL_TYPE="non-llm"; shift ;;
     --anthropic-org)         ANTHROPIC_ORG="$2"; shift 2 ;;
     --anthropic-industry)    ANTHROPIC_INDUSTRY="$2"; shift 2 ;;
     --anthropic-country)     ANTHROPIC_COUNTRY="$2"; shift 2 ;;
@@ -96,7 +98,7 @@ done
 # ---------- Validation ----------
 
 if [[ -z "$MODEL_TYPE" ]]; then
-  echo "ERROR: Model type is required (--claude, --gpt, --gpt-luna or --deepseek)" >&2
+  echo "ERROR: Model type is required (--claude, --gpt, --gpt-luna, --deepseek or --non-llm)" >&2
   exit 1
 fi
 
