@@ -219,3 +219,9 @@ __marimo__/
 
 # Generated output from provisioning scripts
 generated/
+
+# Claude Code local settings and worktrees
+.claude/
+
+# Local agent instructions (not shared)
+AGENTS.md

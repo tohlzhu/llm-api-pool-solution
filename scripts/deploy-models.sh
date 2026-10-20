@@ -23,6 +23,19 @@ CLAUDE_MODELS="claude-opus-5-5|2,claude-sonnet-5-5|2,claude-haiku-5-5|2"
 GPT_MODELS="gpt-5.6-sol|2026-07-09,gpt-5.6-terra|2026-07-09,gpt-5.6-luna|2026-07-09,gpt-6-astra|2026-09-03,gpt-6-sol|2026-09-22,gpt-6.1-sol|2026-09-29,gpt-6-luna|2026-09-22"
 GPT_LUNA_MODELS="gpt-5.6-luna|2026-07-09,gpt-6-luna|2026-09-22"
 DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
+# Non-LLM models: entries are deployment_name|version; see NON_LLM_SPEC for the rest.
+NON_LLM_MODELS="gpt-image-2|2026-04-21,gpt-image-2.5-sunburst|2026-09-08,gpt-image-2.5-flare|2026-09-08,gpt-live-1|2026-09-10,Decision-1|1"
+
+# Non-LLM deployment spec keyed by deployment name: model_name|model_format|sku_name|capacity.
+# Capacity is in SKU units and ignores --tpm: gpt-image-* and Microsoft-Decision-1 use
+# 1 unit = 1 RPM; gpt-live-1 uses 1 unit = 1K TPM.
+declare -A NON_LLM_SPEC=(
+  [gpt-image-2]="gpt-image-2|OpenAI|GlobalStandard|10"                       # 10 RPM
+  [gpt-image-2.5-sunburst]="gpt-image-2.5-sunburst|OpenAI|GlobalStandard|10" # 10 RPM
+  [gpt-image-2.5-flare]="gpt-image-2.5-flare|OpenAI|GlobalStandard|10"       # 10 RPM
+  [gpt-live-1]="gpt-live-1|OpenAI|GlobalStandard|10"                         # 10K TPM
+  [Decision-1]="Microsoft-Decision-1|Microsoft|GlobalStandard|10"            # 10 RPM
+)
 
 # Default TPM per model (used when --tpm not specified)
 declare -A DEFAULT_TPM=(
@@ -52,7 +65,8 @@ Idempotent: reuses existing resources and skips already-deployed models.
 
 Options:
   -i, --input FILE    Input CSV file (default: ./generated/subscriptions.csv)
-  -t, --tpm TPM       Override TPM for all models (useful for testing with low quota)
+  -t, --tpm TPM       Override TPM for all LLM models (useful for testing with low quota);
+                      non-llm capacities are fixed in NON_LLM_SPEC
       --force         Skip confirmation prompt
       --dry-run       Print actions without executing
   -h, --help          Show this help
@@ -361,8 +375,8 @@ get_endpoint() {
   if [[ "$DRY_RUN" == "true" ]]; then
     case "$model_type" in
       claude|deepseek) echo "https://${account_name}.services.ai.azure.com/" ;;
-      gpt|gpt-luna)    echo "https://${account_name}.openai.azure.com/" ;;
-      *)               echo "https://${account_name}.cognitiveservices.azure.com/" ;;
+      gpt|gpt-luna|non-llm) echo "https://${account_name}.openai.azure.com/" ;;
+      *)                    echo "https://${account_name}.cognitiveservices.azure.com/" ;;
     esac
     return 0
   fi
@@ -375,7 +389,7 @@ get_endpoint() {
         --subscription "$subscription_id" \
         --query 'properties.endpoints."AI Foundry API"' -o tsv --only-show-errors
       ;;
-    gpt|gpt-luna)
+    gpt|gpt-luna|non-llm)
       az cognitiveservices account show \
         --name "$account_name" \
         --resource-group "$resource_group" \
@@ -610,6 +624,54 @@ deploy_deepseek_model() {
     }
 }
 
+deploy_non_llm_model() {
+  local subscription_id="$1"
+  local resource_group="$2"
+  local account_name="$3"
+  local deployment_name="$4"
+  local model_version="$5"
+
+  local spec="${NON_LLM_SPEC[$deployment_name]:-}"
+  if [[ -z "$spec" ]]; then
+    log "  ERROR: No NON_LLM_SPEC entry for $deployment_name"
+    return 1
+  fi
+  local model_name model_format sku_name sku_capacity
+  IFS='|' read -r model_name model_format sku_name sku_capacity <<< "$spec"
+
+  # Check if deployment already exists
+  if [[ "$DRY_RUN" != "true" ]]; then
+    local existing_state
+    existing_state="$(check_deployment_exists "$subscription_id" "$resource_group" "$account_name" "$deployment_name")"
+    if [[ -n "$existing_state" ]]; then
+      log "  $deployment_name: already exists (state=$existing_state), skipping"
+      return 0
+    fi
+  fi
+
+  log "  Deploying non-LLM: $deployment_name (model=$model_name, format=$model_format, version=$model_version, sku=$sku_name, capacity=$sku_capacity)"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY-RUN] az cognitiveservices account deployment create --subscription $subscription_id --deployment-name $deployment_name --model-name $model_name --model-format $model_format --sku-name $sku_name --sku-capacity $sku_capacity" >&2
+    return 0
+  fi
+
+  az cognitiveservices account deployment create \
+    --name "$account_name" \
+    --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
+    --deployment-name "$deployment_name" \
+    --model-name "$model_name" \
+    --model-version "$model_version" \
+    --model-format "$model_format" \
+    --sku-name "$sku_name" \
+    --sku-capacity "$sku_capacity" \
+    --output none --only-show-errors || {
+      log "  WARNING: Failed to deploy $deployment_name (may require quota or region)"
+      return 0
+    }
+}
+
 # ---------- Main ----------
 
 main() {
@@ -740,11 +802,16 @@ main() {
         gpt)      models_list="$GPT_MODELS" ;;
         gpt-luna) models_list="$GPT_LUNA_MODELS" ;;
         deepseek) models_list="$DEEPSEEK_MODELS" ;;
+        non-llm)  models_list="$NON_LLM_MODELS" ;;
         *)
           log "WARNING: Unknown model_type '$model_type', skipping"
           exit 0
           ;;
       esac
+
+      if [[ "$model_type" == "non-llm" && -n "$TPM_OVERRIDE" ]]; then
+        log "  NOTE: --tpm does not apply to non-llm models; using NON_LLM_SPEC capacities"
+      fi
 
       # Get access key once per account (shared across all deployments)
       local access_key
@@ -768,6 +835,9 @@ main() {
           deepseek)
             deploy_deepseek_model "$subscription_id" "$resource_group" "$account_name" "$m_name" "$m_version" "$tpm"
             ;;
+          non-llm)
+            deploy_non_llm_model "$subscription_id" "$resource_group" "$account_name" "$m_name" "$m_version"
+            ;;
         esac
 
         # Write endpoint entry with model-type-appropriate path
@@ -776,6 +846,14 @@ main() {
           claude)   model_endpoint="${endpoint%/}/anthropic/v1/messages" ;;
           gpt|gpt-luna)      model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
           deepseek) model_endpoint="${endpoint%/}/v1/chat/completions" ;;
+          non-llm)
+            # Microsoft-format decision models share one endpoint; the deployment goes in the request "model".
+            if [[ "${NON_LLM_SPEC[$m_name]:-}" == *"|Microsoft|"* ]]; then
+              model_endpoint="${endpoint%/}/providers/microsoft/v1/systemone"
+            else
+              model_endpoint="${endpoint%/}/openai/deployments/${m_name}"
+            fi
+            ;;
           *)        model_endpoint="${endpoint%/}/openai/deployments/${m_name}" ;;
         esac
         printf "%s,%s,%s,%s,%s\n" \
