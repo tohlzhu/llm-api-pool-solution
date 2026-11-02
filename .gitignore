@@ -222,6 +222,7 @@ generated/
 
 # Claude Code local settings and worktrees
 .claude/
+CLAUDE.md
 
 # Local agent instructions (not shared)
 AGENTS.md
