@@ -22,7 +22,7 @@ ANTHROPIC_API_VERSION="${ANTHROPIC_API_VERSION:-2025-10-01-preview}"
 CLAUDE_MODELS="claude-opus-5-5|2,claude-sonnet-5-5|2,claude-haiku-5-5|2"
 GPT_MODELS="gpt-5.6-sol|2026-07-09,gpt-5.6-terra|2026-07-09,gpt-5.6-luna|2026-07-09,gpt-6-astra|2026-09-03,gpt-6-sol|2026-09-22,gpt-6.1-sol|2026-09-29,gpt-6-luna|2026-09-22,gpt-6.1-terra|2026-10-26"
 GPT_LUNA_MODELS="gpt-5.6-luna|2026-07-09,gpt-6-luna|2026-09-22"
-DEEPSEEK_MODELS="DeepSeek-V4-Pro|2026-04-23,DeepSeek-V4-Flash|2026-04-23"
+DEEPSEEK_MODELS="DeepSeek-V4.1-Flash-1017|2026-10-17"
 # Non-LLM models: entries are deployment_name|version; see NON_LLM_SPEC for the rest.
 NON_LLM_MODELS="gpt-image-2|2026-04-21,gpt-image-2.5-sunburst|2026-09-08,gpt-image-2.5-flare|2026-09-08,gpt-live-1|2026-09-10,Decision-1|1"
 

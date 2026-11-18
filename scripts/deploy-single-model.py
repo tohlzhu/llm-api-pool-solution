@@ -45,7 +45,7 @@ def positive_number(value):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog='deploy-single-model.py',
-        description="Reconcile one model deployment per subscription, ignoring CSV model_type.",
+        description="Reconcile or delete one model deployment per subscription, ignoring CSV model_type.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Input CSV (compatible with create-subscriptions.sh):
   subscription_id,subscription_name,prefix,model_type,location,
@@ -65,7 +65,11 @@ Updates can reuse the existing deployment's capacity in the same quota pool.
 Extra writable deployment properties (e.g. model.source, modelProviderData,
 versionUpgradeOption, raiPolicyName) can be supplied with --deployment-properties.
 Anthropic provider data otherwise comes from the CSV, with tenant lookup as needed.
-Existing unspecified deployment settings are preserved. Nothing is deleted.
+Existing unspecified deployment settings are preserved in deploy mode.
+--delete removes only the named deployment and always skips intermediate resources
+and quota checks. --model-info may then contain just deployment_name; other model
+fields are ignored. Missing deployments are skipped; deletion waits for absence.
+Deletion also supports --dry-run and requires confirmation unless --force is used.
 Only a deployment summary is emitted; existing endpoint CSVs are not overwritten.
 Requires Python 3 (standard library only) and a logged-in Azure CLI.
 
@@ -84,6 +88,8 @@ Example targeting an existing Foundry account and project:
     parser.add_argument('--project-name', help='Override the Foundry project for every subscription')
     parser.add_argument('--direct', action='store_true',
                         help='Skip providers and resource group/account/project checks; probe only the deployment')
+    parser.add_argument('--delete', action='store_true',
+                        help='Delete the named deployment if it exists; never create resources or query quota')
     parser.add_argument('--deployment-properties', type=json_object, default={}, metavar='JSON',
                         help='Additional writable deployment properties; explicit values are reconciled')
     parser.add_argument('--api-version', default=os.environ.get('DEPLOYMENT_API_VERSION', '2025-10-01-preview'))
@@ -94,15 +100,22 @@ Example targeting an existing Foundry account and project:
                         help='Read existing resources and print writes without executing them')
     args = parser.parse_args(argv)
     fields = [field.strip() for field in args.model_info.split('|')]
-    if len(fields) not in (5, 6) or not all(fields[:5]):
-        parser.error('--model-info requires five non-empty pipe-separated fields and an optional capacity')
-    if len(fields) == 5:
-        fields.append('')
-    if fields[5] and not re.fullmatch(r'[0-9]+', fields[5]):
-        parser.error('sku_capacity must be a non-negative integer in Azure SKU units')
-    args.deployment_name, name, version, model_format, sku_name, capacity = fields
+    if args.delete:
+        if len(fields) not in (1, 5, 6) or not fields[0]:
+            parser.error('--delete requires deployment_name or the usual five/six-field --model-info')
+        args.deployment_name = fields[0]
+    else:
+        if len(fields) not in (5, 6) or not all(fields[:5]):
+            parser.error('--model-info requires five non-empty pipe-separated fields and an optional capacity')
+        if len(fields) == 5:
+            fields.append('')
+        if fields[5] and not re.fullmatch(r'[0-9]+', fields[5]):
+            parser.error('sku_capacity must be a non-negative integer in Azure SKU units')
+        args.deployment_name, name, version, model_format, sku_name, capacity = fields
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', args.deployment_name):
         parser.error('deployment_name must be 1-64 letters, digits, underscores, dots or hyphens')
+    if args.delete:
+        return args
     args.model = {'name': name, 'version': version, 'format': model_format}
     args.sku = {'name': sku_name, 'capacity': int(capacity) if capacity else None}
     properties = args.deployment_properties
@@ -116,11 +129,13 @@ Example targeting an existing Foundry account and project:
     return args
 
 
-def read_subscriptions(path, direct=False):
+def read_subscriptions(path, direct=False, delete=False):
     with open(path, newline='', encoding='utf-8-sig') as source:
         reader = csv.DictReader(source, skipinitialspace=True)
-        required = {'subscription_id', 'subscription_name', 'location'}
-        if not direct:
+        required = {'subscription_id', 'subscription_name'}
+        if not delete:
+            required.add('location')
+        if not direct and not delete:
             required.add('prefix')
         if reader.fieldnames is None:
             raise DeploymentError('Input CSV is empty')
@@ -380,6 +395,29 @@ def wait_for_deployment(azure, url, args, desired=None):
         time.sleep(args.poll_interval)
 
 
+def delete_deployment(azure, url, args, existing):
+    if existing is None:
+        log(f'  {args.deployment_name}: does not exist; skipping deletion')
+        return 'unchanged'
+    if existing.get('properties', {}).get('provisioningState') != 'Deleting':
+        log(f'  {args.deployment_name}: deleting')
+        azure.run('rest', '--method', 'delete', '--url', url, missing_ok=True, write=True)
+    else:
+        log(f'  {args.deployment_name}: deletion already in progress')
+    if azure.dry_run:
+        return 'deleting'
+    deadline = time.monotonic() + args.wait_timeout
+    while True:
+        remaining = azure.run('rest', '--method', 'get', '--url', url, missing_ok=True)
+        if remaining is None:
+            log(f'  {args.deployment_name}: deleted; absence verified')
+            return 'deleted'
+        if time.monotonic() >= deadline:
+            raise DeploymentError(f'{args.deployment_name}: timed out waiting for deletion; '
+                                  'rerun with --delete to check again')
+        time.sleep(args.poll_interval)
+
+
 def reconcile_deployment(azure, row, group, account, args, location=None):
     path = '/'.join(quote(part, safe='') for part in (
         'subscriptions', azure.subscription_id, 'resourceGroups', group, 'providers',
@@ -387,6 +425,8 @@ def reconcile_deployment(azure, row, group, account, args, location=None):
     ))
     url = f'https://management.azure.com/{path}?api-version={quote(args.api_version, safe="")}'
     existing = azure.run('rest', '--method', 'get', '--url', url, missing_ok=True)
+    if args.delete:
+        return delete_deployment(azure, url, args, existing)
     properties = desired_properties(azure, row, args)
     desired = {'sku': args.sku, 'properties': properties}
     if existing is not None:
@@ -434,9 +474,9 @@ def reconcile_deployment(azure, row, group, account, args, location=None):
 
 def process_subscription(row, args):
     azure = Azure(row['subscription_id'], args.dry_run)
-    if args.direct:
+    if args.direct or args.delete:
         group, account, _ = resource_names(row, args)
-        location = row['location']
+        location = row.get('location')
     else:
         ensure_providers(azure)
         group, account, location = ensure_resources(azure, row, args)
@@ -446,17 +486,20 @@ def process_subscription(row, args):
 def main(argv=None):
     args = parse_args(argv)
     try:
-        rows = read_subscriptions(args.input, direct=args.direct)
+        rows = read_subscriptions(args.input, direct=args.direct, delete=args.delete)
         if not rows:
             raise DeploymentError('No subscriptions found in CSV')
         if shutil.which('az') is None:
             raise DeploymentError('Missing required command: az')
-        log(f'=== Single-model deployment: {args.deployment_name} ===')
+        operation = 'deletion' if args.delete else 'deployment'
+        log(f'=== Single-model {operation}: {args.deployment_name} ===')
         log(f'Input: {args.input}; subscriptions: {len(rows)}; '
             f'direct: {args.direct}; dry-run: {args.dry_run}')
         for row in rows:
             log(f'  - {row["subscription_name"]} ({row["subscription_id"]})')
         if not args.force and not args.dry_run:
+            if args.delete:
+                print(f'Delete deployment {args.deployment_name} from {len(rows)} subscription(s)?', file=sys.stderr)
             print('Press Enter to continue, or Ctrl+C to abort...', file=sys.stderr, flush=True)
             if not sys.stdin.readline():
                 raise DeploymentError('Confirmation cancelled; use --force for non-interactive execution')
@@ -468,7 +511,7 @@ def main(argv=None):
             except DeploymentError as error:
                 failed += 1
                 log(f'  ERROR: {row["subscription_name"]}: {error}')
-        log(f'=== {"Dry run" if args.dry_run else "Deployment"} complete: '
+        log(f'=== {"Dry run" if args.dry_run else operation.capitalize()} complete: '
             f'{len(rows) - failed} succeeded, {failed} failed ===')
         return 1 if failed else 0
     except (OSError, csv.Error, DeploymentError) as error:

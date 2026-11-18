@@ -36,3 +36,14 @@ python3 scripts/deploy-single-model.py \
 `--deployment-properties 'JSON'` 可补充模型来源、`versionUpgradeOption`、`raiPolicyName`、`modelProviderData` 等可写部署属性，显式指定的属性也参与一致性检查。例如 `--deployment-properties '{"model":{"source":"<source>"},"versionUpgradeOption":"NoAutoUpgrade"}'`。Anthropic 必填组织信息优先使用该 JSON，其次使用 CSV 的 `anthropic-*` 列，缺失时尝试按原脚本规则查询租户。更新时保留未指定的已有可写设置，不自动删除或重建资源；遇到软删除的同名 account 会提示先恢复或显式清除。
 
 先用 `--dry-run` 查看计划，非交互执行使用 `--force`。单个订阅失败不会阻断后续订阅，但最终退出码非零。新脚本只输出执行摘要，不覆盖原脚本生成的端点清单。
+
+增加 `--delete` 可按订阅批量删除指定 deployment：存在则删除并等待确认不存在，不存在则跳过。删除模式自动跳过 provider、resource group、account、project 和 quota 检查，不会创建或删除任何基础资源，无需再加 `--direct`。`--model-info` 可只填部署名，也兼容原有完整格式，但只按第一个字段 `deployment_name` 定位，不比较其他模型参数。删除仍要求人工确认，`--force` 跳过确认；`--dry-run` 仅预览，不执行删除。删除模式的 CSV 只要求 `subscription_id,subscription_name`，可省略 `prefix,location`。
+
+```bash
+python3 scripts/deploy-single-model.py \
+  --input ./generated/subscriptions-test1.csv \
+  --resource-group rg-foundry \
+  --account-name fdry-demo-sub1 \
+  --model-info "gpt-6-luna" \
+  --delete
+```

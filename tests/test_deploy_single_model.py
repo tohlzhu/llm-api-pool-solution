@@ -263,6 +263,94 @@ class SingleModelTests(unittest.TestCase):
                 self.assertIn('error:', result.stderr)
 
 
+class DeleteDeploymentTests(unittest.TestCase):
+    def setUp(self):
+        self.args = deploy.parse_args(['--delete', '--model-info', 'target-deployment', '--force'])
+        self.row = {'subscription_id': 'sub-1', 'subscription_name': 'sub'}
+        self.existing = {'properties': {'provisioningState': 'Succeeded'}}
+        self.logs = contextlib.redirect_stderr(io.StringIO())
+        self.logs.__enter__()
+        self.addCleanup(self.logs.__exit__, None, None, None)
+
+    def test_missing_deployment_skips_without_infrastructure_or_quota_queries(self):
+        with patch.object(deploy.Azure, 'run', return_value=None) as run, \
+                patch.object(deploy, 'ensure_providers') as providers, \
+                patch.object(deploy, 'ensure_resources') as resources, \
+                patch.object(deploy, 'resolve_capacity') as capacity, \
+                patch.object(deploy, 'desired_properties') as properties:
+            result = deploy.process_subscription(self.row, self.args)
+        self.assertEqual(result, 'unchanged')
+        providers.assert_not_called()
+        resources.assert_not_called()
+        capacity.assert_not_called()
+        properties.assert_not_called()
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[:3], ('rest', '--method', 'get'))
+        self.assertIn('/accounts/fdry-sub/deployments/target-deployment?', run.call_args.args[4])
+        self.assertTrue(run.call_args.kwargs['missing_ok'])
+
+    def test_existing_deployment_is_deleted_then_polled_until_absent(self):
+        deleting = {'properties': {'provisioningState': 'Deleting'}}
+        with patch.object(deploy.Azure, 'run', side_effect=[self.existing, None, deleting, None]) as run, \
+                patch.object(deploy.time, 'sleep') as sleep:
+            result = deploy.process_subscription(self.row, self.args)
+        self.assertEqual(result, 'deleted')
+        self.assertEqual([call.args[2] for call in run.call_args_list], ['get', 'delete', 'get', 'get'])
+        deletion = run.call_args_list[1]
+        self.assertTrue(deletion.kwargs['write'])
+        self.assertTrue(deletion.kwargs['missing_ok'])
+        self.assertEqual(deletion.args[4], run.call_args_list[0].args[4])
+        sleep.assert_called_once()
+
+    def test_failed_deployments_can_be_deleted_without_waiting_for_success(self):
+        failed = {'properties': {'provisioningState': 'Failed'}}
+        with patch.object(deploy.Azure, 'run', side_effect=[failed, None, None]) as run:
+            self.assertEqual(deploy.process_subscription(self.row, self.args), 'deleted')
+        self.assertEqual(run.call_args_list[1].args[2], 'delete')
+
+    def test_deletion_in_progress_is_only_waited_for(self):
+        deleting = {'properties': {'provisioningState': 'Deleting'}}
+        with patch.object(deploy.Azure, 'run', side_effect=[deleting, None]) as run:
+            self.assertEqual(deploy.process_subscription(self.row, self.args), 'deleted')
+        self.assertEqual([call.args[2] for call in run.call_args_list], ['get', 'get'])
+
+    def test_delete_dry_run_never_executes_a_write_or_polls_for_absence(self):
+        self.args.dry_run = True
+        response = subprocess.CompletedProcess([], 0, json.dumps(self.existing), '')
+        with patch.object(deploy.subprocess, 'run', return_value=response) as run:
+            self.assertEqual(deploy.process_subscription(self.row, self.args), 'deleting')
+        self.assertEqual(run.call_count, 1)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index('--method') + 1], 'get')
+        self.assertEqual(command[command.index('--subscription') + 1], 'sub-1')
+
+    def test_delete_timeout_is_not_reported_as_success(self):
+        with patch.object(deploy.Azure, 'run', side_effect=[self.existing, None, self.existing]), \
+                patch.object(deploy.time, 'monotonic', side_effect=[0, 1000]):
+            with self.assertRaisesRegex(deploy.DeploymentError, 'timed out waiting for deletion'):
+                deploy.process_subscription(self.row, self.args)
+
+    def test_delete_permission_failure_is_not_treated_as_missing(self):
+        with patch.object(deploy.Azure, 'run', side_effect=[self.existing, deploy.DeploymentError('AuthorizationFailed')]) as run:
+            with self.assertRaisesRegex(deploy.DeploymentError, 'AuthorizationFailed'):
+                deploy.process_subscription(self.row, self.args)
+        self.assertEqual(run.call_count, 2)
+
+    def test_delete_accepts_full_model_info_but_does_not_use_model_metadata(self):
+        args = deploy.parse_args([
+            '--delete', '--model-info', 'target-deployment|unused|unused|Anthropic|unused|1000',
+        ])
+        with patch.object(deploy.Azure, 'run', return_value=None) as run:
+            self.assertEqual(deploy.process_subscription(self.row, args), 'unchanged')
+        self.assertEqual(run.call_count, 1)
+
+    def test_delete_csv_does_not_require_unused_prefix_or_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'subscriptions.csv'
+            path.write_text('subscription_id,subscription_name\nsub-1,sub\n')
+            self.assertEqual(deploy.read_subscriptions(path, delete=True), [self.row])
+
+
 class QuotaCapacityTests(unittest.TestCase):
     def setUp(self):
         self.args = deploy.parse_args([
